@@ -191,6 +191,12 @@ impl EmulatorCore for Wii {
     fn system(&self) -> System {
         System::Wii
     }
+    fn peek(&mut self, addr: u32, size: u8) -> u32 {
+        self.gc.peek_virtual(addr, size)
+    }
+    fn poke(&mut self, addr: u32, value: u32, size: u8) {
+        self.gc.poke_virtual(addr, value, size)
+    }
     fn game_code(&self) -> [u8; 6] {
         self.gc.game_id
     }

@@ -161,6 +161,36 @@ impl EmulatorCore for Gba {
         System::Gba
     }
 
+    fn peek(&mut self, addr: u32, size: u8) -> u32 {
+        use cpu_arm::{Access, Bus};
+        use kd_core::cheats::read_le;
+        let a = addr as usize;
+        match addr >> 24 {
+            0x02 => read_le(&self.bus.ewram, a & 0x3_FFFF, size),
+            0x03 => read_le(&self.bus.iwram, a & 0x7FFF, size),
+            _ => match size {
+                1 => self.bus.read8(addr, Access::NonSeq) as u32,
+                2 => self.bus.read16(addr & !1, Access::NonSeq) as u32,
+                _ => self.bus.read32(addr & !3, Access::NonSeq),
+            },
+        }
+    }
+
+    fn poke(&mut self, addr: u32, value: u32, size: u8) {
+        use cpu_arm::{Access, Bus};
+        use kd_core::cheats::write_le;
+        let a = addr as usize;
+        match addr >> 24 {
+            0x02 => write_le(&mut self.bus.ewram, a & 0x3_FFFF, value, size),
+            0x03 => write_le(&mut self.bus.iwram, a & 0x7FFF, value, size),
+            _ => match size {
+                1 => self.bus.write8(addr, value as u8, Access::NonSeq),
+                2 => self.bus.write16(addr & !1, value as u16, Access::NonSeq),
+                _ => self.bus.write32(addr & !3, value, Access::NonSeq),
+            },
+        }
+    }
+
     fn game_code(&self) -> [u8; 6] {
         let h = &self.bus.cart.header;
         [h.game_code[0], h.game_code[1], h.game_code[2], h.game_code[3], h.maker[0], h.maker[1]]

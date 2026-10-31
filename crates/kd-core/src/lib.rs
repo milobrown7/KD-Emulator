@@ -13,12 +13,16 @@
 //! * [`clock`] — guest RTCs with per-game time travel.
 //! * [`animal_crossing`] — the Animal Crossing profile for each system.
 //! * [`input`] — front-end input snapshot.
+//! * [`cheats`] — Action Replay, GameShark, CodeBreaker, Gecko and raw codes.
+//! * [`rewind`] — delta-compressed rewind history.
 
 pub mod animal_crossing;
 pub mod arena;
 pub mod audio;
+pub mod cheats;
 pub mod clock;
 pub mod input;
+pub mod rewind;
 pub mod savestate;
 pub mod scheduler;
 pub mod thermal;
@@ -84,5 +88,24 @@ pub trait EmulatorCore: Send {
     /// Animal Crossing title detected at boot, if any.
     fn animal_crossing(&self) -> Option<&'static animal_crossing::AcTitle> {
         animal_crossing::lookup(self.system(), &self.game_code())
+    }
+    /// Read `size` (1, 2 or 4) bytes from the main CPU's address space, for
+    /// cheats and the debugger. RAM reads have no side effects.
+    fn peek(&mut self, addr: u32, size: u8) -> u32;
+    /// Write `size` bytes to the main CPU's address space (cheats).
+    fn poke(&mut self, addr: u32, value: u32, size: u8);
+    /// Host microphone audio (signed 16-bit mono). Only the DS has a mic.
+    fn push_mic(&mut self, _samples: &[i16]) {}
+}
+
+/// Adapts a core to [`cheats::CheatMemory`].
+pub struct CoreMemory<'a>(pub &'a mut dyn EmulatorCore);
+
+impl cheats::CheatMemory for CoreMemory<'_> {
+    fn read(&mut self, addr: u32, size: u8) -> u32 {
+        self.0.peek(addr, size)
+    }
+    fn write(&mut self, addr: u32, value: u32, size: u8) {
+        self.0.poke(addr, value, size)
     }
 }

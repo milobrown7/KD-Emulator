@@ -90,6 +90,8 @@ pub struct Spi {
     pub touch: Option<(u16, u16)>,
     tsc_out: u16,
     tsc_bytes: u8,
+    /// Host microphone samples waiting to be read through TSC channel 6.
+    pub mic: std::collections::VecDeque<i16>,
     pm_index: Option<u8>,
     pm_regs: [u8; 8],
 }
@@ -111,6 +113,7 @@ impl Spi {
             touch: None,
             tsc_out: 0,
             tsc_bytes: 0,
+            mic: std::collections::VecDeque::new(),
             pm_index: None,
             pm_regs: [0, 0, 0, 0, 0x0F, 0, 0, 0],
         }
@@ -218,7 +221,8 @@ impl Spi {
                 (5, Some((x, _))) => screen_to_adc(x),
                 (1, Some((_, y))) => screen_to_adc(y),
                 (5, None) | (1, None) => 0,
-                (6, _) => 0x800, // AUX: microphone at rest
+                // AUX: microphone, 12-bit unsigned around 0x800 (at rest when no host audio).
+                (6, _) => self.mic.pop_front().map_or(0x800, |m| ((m as i32 + 0x8000) >> 4) as u16),
                 _ => 0,
             };
             self.tsc_bytes = 1;
@@ -226,6 +230,16 @@ impl Spi {
             self.tsc_bytes += 1;
         }
         out
+    }
+}
+
+impl Spi {
+    /// Queue host microphone audio (signed 16-bit mono). Old samples are
+    /// dropped beyond half a second so a stalled game never lags behind.
+    pub fn push_mic(&mut self, samples: &[i16]) {
+        self.mic.extend(samples.iter().copied());
+        let excess = self.mic.len().saturating_sub(8192);
+        self.mic.drain(..excess);
     }
 }
 
@@ -282,6 +296,21 @@ mod tests {
         let out = xfer(&mut spi, 2, &[0x90, 0x00, 0x00]);
         let adc = ((out[1] as u16) << 5) | (out[2] as u16 >> 3);
         assert_eq!(adc, screen_to_adc(50));
+    }
+
+    #[test]
+    fn microphone_samples_come_through_aux_channel() {
+        let mut spi = Spi::new();
+        let read = |spi: &mut Spi| {
+            let out = xfer(spi, 2, &[0xE0, 0x00, 0x00]);
+            ((out[1] as u16) << 5) | (out[2] as u16 >> 3)
+        };
+        assert_eq!(read(&mut spi), 0x800, "silence when no host audio");
+        spi.push_mic(&[0x7FF0, -0x8000]);
+        assert_eq!(read(&mut spi), 0xFFF);
+        assert_eq!(read(&mut spi), 0x000);
+        spi.push_mic(&vec![0; 10_000]);
+        assert_eq!(spi.mic.len(), 8192, "queue bounded");
     }
 
     #[test]

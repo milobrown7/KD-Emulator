@@ -78,6 +78,74 @@ impl Disc for FileDisc {
 pub const GC_MAGIC: u32 = 0xC233_9F3D;
 pub const WII_MAGIC: u32 = 0x5D1C_9EA3;
 
+/// The GameCube `opening.bnr`: 96x32 banner image and names.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GcBanner {
+    /// 96x32 RGBA8888 (byte order R, G, B, A).
+    pub image: Vec<u32>,
+    pub short_name: String,
+    pub long_name: String,
+    pub maker: String,
+}
+
+fn latin1(b: &[u8]) -> String {
+    let end = b.iter().position(|&c| c == 0).unwrap_or(b.len());
+    b[..end].iter().map(|&c| c as char).collect::<String>().trim().to_string()
+}
+
+/// Find a file by name in the disc's file system table and return
+/// (offset, length). `read` fills a buffer from a disc offset.
+pub fn find_file(read: &mut dyn FnMut(u64, &mut [u8]) -> bool, name: &str) -> Option<(u64, u32)> {
+    let mut h = [0u8; 0x440];
+    if !read(0, &mut h) {
+        return None;
+    }
+    let (fst_off, fst_size) = (be32(&h, 0x424) as u64, be32(&h, 0x428) as usize);
+    if !(12..=16 << 20).contains(&fst_size) {
+        return None;
+    }
+    let mut fst = vec![0u8; fst_size];
+    if !read(fst_off, &mut fst) {
+        return None;
+    }
+    let count = be32(&fst, 8) as usize;
+    let strings = count.checked_mul(12)?;
+    if strings > fst.len() {
+        return None;
+    }
+    (1..count).find_map(|i| {
+        let e = &fst[i * 12..i * 12 + 12];
+        if e[0] != 0 {
+            return None; // directory
+        }
+        let name_off = strings + (be32(e, 0) & 0x00FF_FFFF) as usize;
+        let raw = fst.get(name_off..)?;
+        let end = raw.iter().position(|&c| c == 0).unwrap_or(raw.len());
+        let file = std::str::from_utf8(&raw[..end]).ok()?;
+        file.eq_ignore_ascii_case(name).then(|| (be32(e, 4) as u64, be32(e, 8)))
+    })
+}
+
+/// Read `opening.bnr` (BNR1/BNR2).
+pub fn read_banner(read: &mut dyn FnMut(u64, &mut [u8]) -> bool) -> Option<GcBanner> {
+    let (off, len) = find_file(read, "opening.bnr")?;
+    if len < 0x1960 {
+        return None;
+    }
+    let mut b = vec![0u8; 0x1960];
+    if !read(off, &mut b) || !(b.starts_with(b"BNR1") || b.starts_with(b"BNR2")) {
+        return None;
+    }
+    use gpu_gx_vk::texture::{decode, TexFormat, TlutFormat};
+    let image = decode(TexFormat::Rgb5a3, &b[0x20..0x1820], 96, 32, &[], TlutFormat::Rgb5a3);
+    Some(GcBanner {
+        image,
+        short_name: latin1(&b[0x1820..0x1840]),
+        maker: latin1(&b[0x1840..0x1860]),
+        long_name: latin1(&b[0x1860..0x18A0]),
+    })
+}
+
 fn be32(b: &[u8], at: usize) -> u32 {
     u32::from_be_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]])
 }
@@ -187,6 +255,45 @@ impl ApploaderHeader {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn banner_found_through_fst() {
+        let mut disc = vec![0u8; 0x10000];
+        disc[0x1C..0x20].copy_from_slice(&GC_MAGIC.to_be_bytes());
+        // FST at 0x2000: root + one file "opening.bnr" at 0x4000.
+        let fst_off = 0x2000usize;
+        let names = b"opening.bnr\0";
+        let fst_len = 24 + names.len();
+        disc[0x424..0x428].copy_from_slice(&(fst_off as u32).to_be_bytes());
+        disc[0x428..0x42C].copy_from_slice(&(fst_len as u32).to_be_bytes());
+        disc[fst_off] = 1;
+        disc[fst_off + 8..fst_off + 12].copy_from_slice(&2u32.to_be_bytes());
+        disc[fst_off + 16..fst_off + 20].copy_from_slice(&0x4000u32.to_be_bytes());
+        disc[fst_off + 20..fst_off + 24].copy_from_slice(&0x1960u32.to_be_bytes());
+        disc[fst_off + 24..fst_off + 24 + names.len()].copy_from_slice(names);
+        let bnr = 0x4000;
+        disc[bnr..bnr + 4].copy_from_slice(b"BNR1");
+        // First texel opaque white (RGB5A3 with the top bit set).
+        disc[bnr + 0x20..bnr + 0x22].copy_from_slice(&0xFFFFu16.to_be_bytes());
+        disc[bnr + 0x1820..bnr + 0x1820 + 15].copy_from_slice(b"Animal Crossing");
+        disc[bnr + 0x1860..bnr + 0x1860 + 15].copy_from_slice(b"Animal Crossing");
+        let mut read = |off: u64, buf: &mut [u8]| {
+            let o = off as usize;
+            match disc.get(o..o + buf.len()) {
+                Some(s) => {
+                    buf.copy_from_slice(s);
+                    true
+                }
+                None => false,
+            }
+        };
+        assert_eq!(find_file(&mut read, "OPENING.BNR"), Some((0x4000, 0x1960)));
+        let banner = read_banner(&mut read).unwrap();
+        assert_eq!(banner.short_name, "Animal Crossing");
+        assert_eq!(banner.image.len(), 96 * 32);
+        assert_eq!(banner.image[0], 0xFFFF_FFFF);
+        assert!(find_file(&mut read, "missing.bin").is_none());
+    }
 
     #[test]
     fn header_detects_animal_crossing_gamecube_disc() {

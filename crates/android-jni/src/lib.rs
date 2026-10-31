@@ -1,17 +1,19 @@
 //! # android-jni (`libkd_emulator.so`)
 //!
 //! JNI surface for `com.kdemulator.bridge.NativeEmulatorBridge`:
-//! loading games from Storage Access Framework file descriptors, the
-//! emulation thread (pinned to Prime/Mid cores), `ANativeWindow`
-//! presentation, AAudio output, input, thermal status, save states,
-//! backup memory, the mobile debugger and Animal Crossing time travel.
+//! loading games from Storage Access Framework file descriptors, library
+//! metadata (titles, DS icons, GameCube banners), the emulation thread
+//! (pinned to Prime/Mid cores), frame hand-off to the Kotlin `GameView`,
+//! AAudio output, input, microphone, thermal status, save states, backup
+//! memory, fast-forward, rewind, cheats, the mobile debugger and Animal
+//! Crossing time travel.
 
 pub mod session;
 
 #[cfg(target_os = "android")]
 mod android;
 
-use jni::objects::{JByteArray, JClass, JObject, JString};
+use jni::objects::{JByteArray, JByteBuffer, JClass, JIntArray, JShortArray, JString};
 use jni::sys::{jboolean, jbyteArray, jfloat, jint, jlong, jstring, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 use kd_core::input::button;
@@ -32,13 +34,32 @@ pub(crate) fn log(msg: &str) {
     eprintln!("[kd-emulator] {msg}");
 }
 
+/// The newest finished frame, handed from the emulation thread to the UI.
+#[derive(Default)]
+pub struct FrameSlot {
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Vec<u32>,
+    /// Increments on every published frame.
+    pub seq: i64,
+}
+
+impl FrameSlot {
+    fn publish(&mut self, f: &kd_core::FrameView<'_>) {
+        self.width = f.width;
+        self.height = f.height;
+        self.pixels.clear();
+        self.pixels.extend_from_slice(f.pixels);
+        self.seq += 1;
+    }
+}
+
 #[derive(Default)]
 struct Runtime {
     session: Option<Arc<Mutex<Session>>>,
     running: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
-    #[cfg(target_os = "android")]
-    window: Arc<Mutex<Option<android::NativeWindow>>>,
+    frame: Arc<Mutex<FrameSlot>>,
     #[cfg(target_os = "android")]
     audio: Option<android::AudioStream>,
     cache_dir: String,
@@ -162,6 +183,7 @@ fn install(name: &str, core: Box<dyn kd_core::EmulatorCore>) -> jint {
     s.gpu = detect_gpu(&cache);
     let consumer = s.take_audio_consumer();
     with_runtime(|rt| {
+        rt.frame.lock().unwrap_or_else(|p| p.into_inner()).publish(&s.core.frame());
         rt.session = Some(Arc::new(Mutex::new(s)));
         #[cfg(target_os = "android")]
         {
@@ -206,8 +228,7 @@ fn start_thread() {
         let running = rt.running.clone();
         let tid = rt.emu_tid.clone();
         let last_ns = rt.last_frame_ns.clone();
-        #[cfg(target_os = "android")]
-        let window = rt.window.clone();
+        let frame = rt.frame.clone();
         let handle = std::thread::Builder::new()
             .name("kd-emu".into())
             .spawn(move || {
@@ -224,10 +245,7 @@ fn start_thread() {
                         let mut s = session.lock().unwrap_or_else(|p| p.into_inner());
                         let t0 = Instant::now();
                         s.step();
-                        #[cfg(target_os = "android")]
-                        if let Some(w) = window.lock().unwrap_or_else(|p| p.into_inner()).as_mut() {
-                            w.present(&s.core.frame());
-                        }
+                        frame.lock().unwrap_or_else(|p| p.into_inner()).publish(&s.core.frame());
                         last_ns.store(t0.elapsed().as_nanos() as i64, Ordering::Relaxed);
                         s.frame_period()
                     };
@@ -290,44 +308,225 @@ pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeLoa
     guard(-1, || load_fd(fd, &name))
 }
 
+/// Random-access reads from a descriptor (does not move its offset).
+fn pread_exact(fd: i32, off: u64, buf: &mut [u8]) -> bool {
+    let mut done = 0;
+    while done < buf.len() {
+        // SAFETY: pread into our own buffer.
+        let got = unsafe {
+            libc::pread(
+                fd,
+                buf[done..].as_mut_ptr() as *mut libc::c_void,
+                buf.len() - done,
+                (off + done as u64) as libc::off_t,
+            )
+        };
+        if got <= 0 {
+            return false;
+        }
+        done += got as usize;
+    }
+    true
+}
+
+/// Library metadata as `key=value` lines plus the game's own artwork (if
+/// any) as Android ARGB pixels; `icon_w`/`icon_h` give its size.
+pub fn game_info_text(info: &session::GameInfo) -> (String, Vec<i32>) {
+    let (w, h, argb) = match &info.icon {
+        Some((w, h, px)) => {
+            let argb = px
+                .iter()
+                .map(|&p| {
+                    let (r, g, b, a) = (p & 0xFF, (p >> 8) & 0xFF, (p >> 16) & 0xFF, p >> 24);
+                    (a << 24 | r << 16 | g << 8 | b) as i32
+                })
+                .collect();
+            (*w, *h, argb)
+        }
+        None => (0, 0, Vec::new()),
+    };
+    let text = format!(
+        "system={}\ncode={}\ntitle={}\nac={}\nicon_w={w}\nicon_h={h}\n",
+        info.system as u8,
+        info.code,
+        info.title.replace('\n', " "),
+        info.animal_crossing as u8
+    );
+    (text, argb)
+}
+
 #[no_mangle]
-pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativePeekTitleFd<'l>(
+pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeGameInfoFd<'l>(
     mut env: JNIEnv<'l>,
     _class: JClass<'l>,
     fd: jint,
     name: JString<'l>,
+    icon_out: JIntArray<'l>,
 ) -> jstring {
     let name: String = env.get_string(&name).map(|s| s.into()).unwrap_or_default();
-    let out = guard(String::new(), || {
-        let data = read_fd_prefix(fd, 0x1000).unwrap_or_default();
-        session::peek_title(&name, &data)
-            .map(|(s, code, title)| format!("{}|{code}|{title}", s as u8))
-            .unwrap_or_default()
+    let (text, argb) = guard((String::new(), Vec::new()), || {
+        let mut read = |off: u64, buf: &mut [u8]| pread_exact(fd, off, buf);
+        session::game_info(&name, &mut read).map(|i| game_info_text(&i)).unwrap_or_default()
     });
-    new_jstring(&mut env, &out)
+    if !argb.is_empty() && !icon_out.is_null() {
+        let cap = env.get_array_length(&icon_out).unwrap_or(0) as usize;
+        if cap >= argb.len() {
+            let _ = env.set_int_array_region(&icon_out, 0, &argb);
+        }
+    }
+    new_jstring(&mut env, &text)
+}
+
+/// Frame dimensions packed as `width << 16 | height` (0 before any frame).
+#[no_mangle]
+pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeGetFrameSize(
+    _env: JNIEnv,
+    _class: JClass,
+) -> jint {
+    with_runtime(|rt| {
+        let f = rt.frame.lock().unwrap_or_else(|p| p.into_inner());
+        (f.width << 16 | f.height) as jint
+    })
+}
+
+/// Copy the newest frame (RGBA8888) into a direct buffer if it is newer
+/// than `last_seq`. Returns the frame's sequence number, or -1 if the
+/// buffer is too small.
+#[no_mangle]
+pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeCopyFrame<'l>(
+    env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    buffer: JByteBuffer<'l>,
+    last_seq: jlong,
+) -> jlong {
+    guard(-1, || {
+        let Ok(ptr) = env.get_direct_buffer_address(&buffer) else { return -1 };
+        let cap = env.get_direct_buffer_capacity(&buffer).unwrap_or(0);
+        let slot = with_runtime(|rt| rt.frame.clone());
+        let f = slot.lock().unwrap_or_else(|p| p.into_inner());
+        if f.seq == last_seq {
+            return f.seq;
+        }
+        let bytes = f.pixels.len() * 4;
+        if cap < bytes {
+            return -1;
+        }
+        // SAFETY: the direct buffer holds at least `bytes` bytes and does
+        // not overlap the slot's Vec.
+        unsafe { std::ptr::copy_nonoverlapping(f.pixels.as_ptr() as *const u8, ptr, bytes) };
+        f.seq
+    })
+}
+
+/// Run `n` frames synchronously while the emulation thread is paused
+/// (frame advance; also used by instrumentation tests).
+#[no_mangle]
+pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeRunFrames(
+    _env: JNIEnv,
+    _class: JClass,
+    n: jint,
+) {
+    guard((), || {
+        if with_runtime(|rt| rt.thread.is_some()) {
+            return;
+        }
+        let slot = with_runtime(|rt| rt.frame.clone());
+        with_session((), |s| {
+            for _ in 0..n.max(0) {
+                s.step();
+            }
+            slot.lock().unwrap_or_else(|p| p.into_inner()).publish(&s.core.frame());
+        })
+    })
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeSetSurface<'l>(
+pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeSetSpeed(
+    _env: JNIEnv,
+    _class: JClass,
+    speed: jint,
+) {
+    guard((), || with_session((), |s| s.set_speed(speed.max(1) as u32)))
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeSetVolume(
+    _env: JNIEnv,
+    _class: JClass,
+    volume: jint,
+) {
+    guard((), || with_session((), |s| s.volume = volume.clamp(0, 256) as u32))
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeSetRewindInterval(
+    _env: JNIEnv,
+    _class: JClass,
+    frames: jint,
+) {
+    guard((), || with_session((), |s| s.set_rewind_interval(frames.max(0) as u32)))
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeSetRewinding(
+    _env: JNIEnv,
+    _class: JClass,
+    on: jboolean,
+) {
+    guard((), || with_session((), |s| s.set_rewinding(on != JNI_FALSE)))
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeGetRewindAvailable(
+    _env: JNIEnv,
+    _class: JClass,
+) -> jint {
+    guard(0, || with_session(0, |s| s.rewind_available() as jint))
+}
+
+/// Replace the active cheats (see `Session::set_cheats` for the format).
+/// Returns the errors, one per line (empty when every cheat parsed).
+#[no_mangle]
+pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeSetCheats<'l>(
+    mut env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    spec: JString<'l>,
+) -> jstring {
+    let spec: String = env.get_string(&spec).map(|s| s.into()).unwrap_or_default();
+    let errors = guard(Vec::new(), || with_session(Vec::new(), |s| s.set_cheats(&spec)));
+    new_jstring(&mut env, &errors.join("\n"))
+}
+
+/// Check a cheat before saving it. Returns an error message, or "" if OK.
+#[no_mangle]
+pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeValidateCheat<'l>(
+    mut env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    format: JString<'l>,
+    code: JString<'l>,
+) -> jstring {
+    let format: String = env.get_string(&format).map(|s| s.into()).unwrap_or_default();
+    let code: String = env.get_string(&code).map(|s| s.into()).unwrap_or_default();
+    let msg = guard("internal error".to_string(), || match kd_core::cheats::CheatFormat::from_id(&format) {
+        Some(f) => kd_core::cheats::Cheat::parse(f, &code).err().unwrap_or_default(),
+        None => format!("unknown format {format}"),
+    });
+    new_jstring(&mut env, &msg)
+}
+
+/// Host microphone samples (16-bit mono) for the DS.
+#[no_mangle]
+pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativePushMic<'l>(
     env: JNIEnv<'l>,
     _class: JClass<'l>,
-    surface: JObject<'l>,
+    samples: JShortArray<'l>,
+    count: jint,
 ) {
-    guard((), || {
-        #[cfg(target_os = "android")]
-        {
-            let w = if surface.is_null() {
-                None
-            } else {
-                // SAFETY: valid env/surface for this JNI call.
-                unsafe { android::NativeWindow::from_surface(env.get_raw(), surface.as_raw()) }
-            };
-            let slot = with_runtime(|rt| rt.window.clone());
-            *slot.lock().unwrap_or_else(|p| p.into_inner()) = w;
-        }
-        #[cfg(not(target_os = "android"))]
-        let _ = (&env, &surface);
-    })
+    let n = env.get_array_length(&samples).unwrap_or(0).min(count).max(0) as usize;
+    let mut buf = vec![0i16; n];
+    if env.get_short_array_region(&samples, 0, &mut buf).is_ok() {
+        guard((), || with_session((), |s| s.core.push_mic(&buf)))
+    }
 }
 
 #[no_mangle]
@@ -584,6 +783,12 @@ mod tests {
         let frames = with_session(0, |s| s.stats.frames);
         stop_thread();
         assert!(frames >= 2, "emulation thread produced {frames} frames");
+        let (seq, w, h, len) = with_runtime(|rt| {
+            let f = rt.frame.lock().unwrap();
+            (f.seq, f.width, f.height, f.pixels.len())
+        });
+        assert!(seq as u64 >= frames, "every frame published to the UI slot ({seq} vs {frames})");
+        assert_eq!((w, h, len), (240, 160, 240 * 160));
         assert!(with_runtime(|rt| rt.emu_tid.load(Ordering::SeqCst)) > 0);
         assert_eq!(load("nothing.txt", vec![1, 2, 3]), -1);
     }

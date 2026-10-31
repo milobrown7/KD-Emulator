@@ -8,6 +8,7 @@ use crate::gpu3d::Gpu3d;
 use crate::ipc::{Ipc, IpcIrqs};
 use crate::rtc::Rtc;
 use crate::spi::Spi;
+use crate::spu::{Spu, SpuMem, SAMPLE_CYCLES};
 use crate::vram::{View, Vram};
 use cpu_arm::cp15::Cp15;
 use cpu_arm::{Access, Arm, Bus, SwiOutcome};
@@ -36,15 +37,17 @@ pub enum NdsEvent {
     HBlank,
     LineEnd,
     Timer(u8, u8),
+    SpuSample,
 }
 
 impl EventKind for NdsEvent {
-    const SLOTS: usize = 10;
+    const SLOTS: usize = 11;
     fn slot(self) -> usize {
         match self {
             NdsEvent::HBlank => 0,
             NdsEvent::LineEnd => 1,
             NdsEvent::Timer(cpu, n) => 2 + cpu as usize * 4 + n as usize,
+            NdsEvent::SpuSample => 10,
         }
     }
 }
@@ -55,6 +58,7 @@ impl NdsEvent {
             0 => NdsEvent::HBlank,
             1 => NdsEvent::LineEnd,
             2..=9 => NdsEvent::Timer(((v - 2) / 4) as u8, ((v - 2) % 4) as u8),
+            10 => NdsEvent::SpuSample,
             _ => return None,
         })
     }
@@ -172,17 +176,13 @@ pub struct Shared {
     sqrtcnt: u16,
     sqrt_param: u64,
     sqrt_result: u32,
-    sound_regs: Box<[u8]>,
+    pub spu: Spu,
     /// 256x384 RGBA8888: top screen above bottom screen.
     pub framebuffer: Vec<u32>,
     pub frame_done: bool,
     pub clock: GuestClock,
 }
 
-#[inline]
-fn rd16(m: &[u8], a: usize) -> u16 {
-    u16::from_le_bytes([m[a], m[a + 1]])
-}
 #[inline]
 fn rd32(m: &[u8], a: usize) -> u32 {
     u32::from_le_bytes([m[a], m[a + 1], m[a + 2], m[a + 3]])
@@ -256,12 +256,13 @@ impl Shared {
             sqrtcnt: 0,
             sqrt_param: 0,
             sqrt_result: 0,
-            sound_regs: vec![0; 0x120].into_boxed_slice(),
+            spu: Spu::new(),
             framebuffer: vec![0xFF00_0000; WIDTH * 384],
             frame_done: false,
             clock: GuestClock::host(),
         };
         s.sched.schedule_at(HBLANK_START, NdsEvent::HBlank);
+        s.sched.schedule_at(SAMPLE_CYCLES, NdsEvent::SpuSample);
         s
     }
 
@@ -423,6 +424,16 @@ impl Shared {
                 self.sched.schedule_at(at + HBLANK_START, NdsEvent::HBlank);
             }
             NdsEvent::Timer(cpu, n) => self.timer_overflow(cpu as usize, n as usize, at),
+            NdsEvent::SpuSample => {
+                let mut mem = SpuMem {
+                    main_ram: &mut self.main_ram,
+                    wram: &mut self.wram,
+                    wram7: &mut self.wram7,
+                    wramcnt: self.wramcnt,
+                };
+                self.spu.tick(&mut mem);
+                self.sched.schedule_at(at + SAMPLE_CYCLES, NdsEvent::SpuSample);
+            }
         }
     }
 
@@ -1215,10 +1226,7 @@ impl Bus7<'_> {
             0x240 => s.vram.arm7_stat() as u16 | (s.wramcnt as u16) << 8,
             0x300 => s.io[ARM7].postflg as u16,
             0x304 => s.powcnt2,
-            0x400..=0x51F => {
-                let i = (off - 0x400) as usize;
-                rd16(&s.sound_regs, i)
-            }
+            0x400..=0x51F => s.spu.read16(off - 0x400),
             _ => 0,
         }
     }
@@ -1254,10 +1262,7 @@ impl Bus7<'_> {
                 }
             }
             0x304 => s.powcnt2 = v & 3,
-            0x400..=0x51F => {
-                let i = (off - 0x400) as usize;
-                wr16(&mut s.sound_regs, i, v);
-            }
+            0x400..=0x51F => s.spu.write16(off - 0x400, v),
             _ => {}
         }
     }
@@ -1402,7 +1407,7 @@ impl SaveState for Shared {
         w.u64(self.div_denom);
         w.u16(self.sqrtcnt);
         w.u64(self.sqrt_param);
-        w.bytes(&self.sound_regs);
+        self.spu.save_state(w);
         w.i64(self.clock.offset_secs);
     }
 
@@ -1467,7 +1472,7 @@ impl SaveState for Shared {
         self.div_denom = r.u64()?;
         self.sqrtcnt = r.u16()?;
         self.sqrt_param = r.u64()?;
-        r.bytes_into(&mut self.sound_regs)?;
+        self.spu.load_state(r)?;
         self.clock.offset_secs = r.i64()?;
         self.update_div();
         self.update_sqrt();
@@ -1478,6 +1483,27 @@ impl SaveState for Shared {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn arm7_sound_registers_drive_sample_events() {
+        let mut s = Shared::new(vec![0; 0x200], vec![], vec![]);
+        s.main_ram[0x100..0x140].fill(0x40);
+        {
+            let mut b7 = Bus7 { s: &mut s };
+            b7.io_write16(0x500, 0x807F); // SOUNDCNT: enable, master 127
+            b7.io_write32(0x404, 0x0200_0100);
+            b7.io_write16(0x408, 0xFE00);
+            b7.io_write32(0x40C, 16);
+            b7.io_write32(0x400, 0x8800_007F | 0x40 << 16); // start, loop, PCM8, vol 127, centre
+            assert_ne!(b7.io_read16(0x402) & 0x8000, 0, "busy bit visible to the ARM7");
+        }
+        s.sched.advance_to(SAMPLE_CYCLES * 20);
+        while let Some((at, ev)) = s.sched.pop_due() {
+            s.handle_event(at, ev);
+        }
+        assert_eq!(s.spu.out.len(), 20);
+        assert!(s.spu.out.iter().all(|f| f.left > 0 && f.right > 0), "{:?}", &s.spu.out[..4]);
+    }
 
     #[test]
     fn divider_modes() {

@@ -25,6 +25,7 @@ pub mod gpu3d;
 pub mod ipc;
 pub mod rtc;
 pub mod spi;
+pub mod spu;
 pub mod vram;
 
 use bus::{Bus7, Bus9, Shared, ARM7, ARM9, FRAME_CYCLES};
@@ -38,7 +39,7 @@ use kd_core::{
 
 /// Lockstep slice length in master (ARM9) cycles.
 const SLICE: u64 = 64;
-pub const SAMPLE_RATE: u32 = 32768;
+pub const SAMPLE_RATE: u32 = spu::OUTPUT_RATE;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BootError {
@@ -62,7 +63,6 @@ pub struct Nds {
     pub arm7: Arm,
     pub s: Shared,
     pub ac_setup: AcSetup,
-    audio_debt: f64,
 }
 
 impl Nds {
@@ -76,7 +76,6 @@ impl Nds {
             arm7: Arm::new(CpuModel::Arm7Tdmi),
             s: Shared::new(rom, bios::stub9(), bios::stub7()),
             ac_setup: animal_crossing::setup_for(System::Nds),
-            audio_debt: 0.0,
         };
         nds.direct_boot()?;
         Ok(nds)
@@ -196,6 +195,11 @@ impl Nds {
         }
     }
 
+    /// Feed host microphone audio (signed 16-bit mono, any rate near 16 kHz).
+    pub fn push_mic(&mut self, samples: &[i16]) {
+        self.s.spi.push_mic(samples);
+    }
+
     pub fn set_input(&mut self, input: &InputState) {
         let map = [
             (button::A, 0),
@@ -220,6 +224,39 @@ impl EmulatorCore for Nds {
         System::Nds
     }
 
+    fn peek(&mut self, addr: u32, size: u8) -> u32 {
+        if addr >> 24 == 0x02 {
+            return kd_core::cheats::read_le(&self.s.main_ram, addr as usize & 0x3F_FFFF, size);
+        }
+        let saved = self.s.time[ARM9];
+        let mut b9 = Bus9 { s: &mut self.s };
+        let v = match size {
+            1 => b9.read8(addr, Access::NonSeq) as u32,
+            2 => b9.read16(addr & !1, Access::NonSeq) as u32,
+            _ => b9.read32(addr & !3, Access::NonSeq),
+        };
+        self.s.time[ARM9] = saved;
+        v
+    }
+
+    fn poke(&mut self, addr: u32, value: u32, size: u8) {
+        if addr >> 24 == 0x02 {
+            return kd_core::cheats::write_le(&mut self.s.main_ram, addr as usize & 0x3F_FFFF, value, size);
+        }
+        let saved = self.s.time[ARM9];
+        let mut b9 = Bus9 { s: &mut self.s };
+        match size {
+            1 => b9.write8(addr, value as u8, Access::NonSeq),
+            2 => b9.write16(addr & !1, value as u16, Access::NonSeq),
+            _ => b9.write32(addr & !3, value, Access::NonSeq),
+        }
+        self.s.time[ARM9] = saved;
+    }
+
+    fn push_mic(&mut self, samples: &[i16]) {
+        self.s.spi.push_mic(samples);
+    }
+
     fn game_code(&self) -> [u8; 6] {
         let h = &self.s.card.header;
         [h.game_code[0], h.game_code[1], h.game_code[2], h.game_code[3], h.maker[0], h.maker[1]]
@@ -228,8 +265,6 @@ impl EmulatorCore for Nds {
     fn run_frame(&mut self, input: &InputState) {
         self.set_input(input);
         self.run_frame_inner();
-        // Sound hardware is not emulated yet: keep the audio clock fed.
-        self.audio_debt += SAMPLE_RATE as f64 / 59.8261;
     }
 
     fn frame(&self) -> FrameView<'_> {
@@ -241,9 +276,7 @@ impl EmulatorCore for Nds {
     }
 
     fn drain_audio(&mut self, out: &mut Vec<StereoFrame>) {
-        let n = self.audio_debt as usize;
-        self.audio_debt -= n as f64;
-        out.extend(std::iter::repeat_n(StereoFrame::SILENCE, n));
+        out.append(&mut self.s.spu.out);
     }
 
     fn reset(&mut self) {

@@ -243,6 +243,7 @@ impl CpuFeatures {
         {
             // SAFETY: getauxval has no preconditions.
             let (h1, h2) = unsafe { (libc::getauxval(libc::AT_HWCAP), libc::getauxval(libc::AT_HWCAP2)) };
+            #[allow(clippy::unnecessary_cast)] // c_ulong is only 64-bit on 64-bit targets
             Self::from_hwcaps(h1 as u64, h2 as u64)
         }
         #[cfg(not(all(target_arch = "aarch64", any(target_os = "linux", target_os = "android"))))]

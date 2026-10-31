@@ -308,7 +308,43 @@ impl GameCube {
     }
 }
 
+impl GameCube {
+    /// Big-endian read through the cached/uncached views of MEM1 (and MEM2
+    /// on a Wii). Other addresses read as 0.
+    pub fn peek_virtual(&mut self, va: u32, size: u8) -> u32 {
+        let pa = (va & 0x1FFF_FFFF) as usize;
+        if pa < bus::MEM1_SIZE {
+            return kd_core::cheats::read_be(self.bus.ram(), pa, size);
+        }
+        if (0x1000_0000..0x1400_0000).contains(&pa) {
+            if let Some(h) = self.bus.hollywood.as_mut() {
+                return kd_core::cheats::read_be(h.mem2(), pa - 0x1000_0000, size);
+            }
+        }
+        0
+    }
+
+    pub fn poke_virtual(&mut self, va: u32, value: u32, size: u8) {
+        let pa = (va & 0x1FFF_FFFF) as usize;
+        if pa < bus::MEM1_SIZE {
+            kd_core::cheats::write_be(self.bus.ram(), pa, value, size);
+        } else if (0x1000_0000..0x1400_0000).contains(&pa) {
+            if let Some(h) = self.bus.hollywood.as_mut() {
+                kd_core::cheats::write_be(h.mem2(), pa - 0x1000_0000, value, size);
+            }
+        }
+    }
+}
+
 impl EmulatorCore for GameCube {
+    fn peek(&mut self, addr: u32, size: u8) -> u32 {
+        self.peek_virtual(addr, size)
+    }
+
+    fn poke(&mut self, addr: u32, value: u32, size: u8) {
+        self.poke_virtual(addr, value, size)
+    }
+
     fn system(&self) -> System {
         System::GameCube
     }

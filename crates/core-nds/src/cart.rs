@@ -24,6 +24,67 @@ fn le32(rom: &[u8], at: usize) -> u32 {
     rom.get(at..at + 4).map(|b| u32::from_le_bytes(b.try_into().unwrap())).unwrap_or(0)
 }
 
+/// Icon and title from the cartridge banner (what the DS menu shows).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Banner {
+    /// 32x32 RGBA8888 (byte order R, G, B, A); palette index 0 is transparent.
+    pub icon: Vec<u32>,
+    /// English title lines (the last line is usually the publisher).
+    pub title_lines: Vec<String>,
+}
+
+/// Offset of the banner within the ROM (header word 0x68; 0 = none).
+pub fn banner_offset(header: &[u8]) -> u32 {
+    le32(header, 0x68)
+}
+
+/// Bytes of banner data [`parse_banner`] needs.
+pub const BANNER_SIZE: usize = 0x840;
+
+/// Decode a banner (`b` starts at [`banner_offset`]).
+pub fn parse_banner(b: &[u8]) -> Option<Banner> {
+    if b.len() < BANNER_SIZE {
+        return None;
+    }
+    let ex5 = |v: u16| ((v << 3) | (v >> 2)) as u32;
+    let palette: Vec<u32> = (0..16)
+        .map(|i| {
+            let c = u16::from_le_bytes([b[0x220 + i * 2], b[0x221 + i * 2]]);
+            let (r, g, bl) = (ex5(c & 31), ex5((c >> 5) & 31), ex5((c >> 10) & 31));
+            if i == 0 {
+                0
+            } else {
+                r | g << 8 | bl << 16 | 0xFF00_0000
+            }
+        })
+        .collect();
+    let mut icon = vec![0u32; 32 * 32];
+    for tile in 0..16 {
+        let (tx, ty) = (tile % 4, tile / 4);
+        for py in 0..8 {
+            for px in 0..8 {
+                let byte = b[0x20 + tile * 32 + py * 4 + px / 2];
+                let idx = if px & 1 == 0 { byte & 0xF } else { byte >> 4 };
+                icon[(ty * 8 + py) * 32 + tx * 8 + px] = palette[idx as usize];
+            }
+        }
+    }
+    let units: Vec<u16> = b[0x340..0x440].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+    let end = units.iter().position(|&u| u == 0).unwrap_or(units.len());
+    let text = String::from_utf16_lossy(&units[..end]);
+    let title_lines: Vec<String> = text.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect();
+    Some(Banner { icon, title_lines })
+}
+
+impl Banner {
+    /// Game name without the publisher line.
+    pub fn display_title(&self) -> Option<String> {
+        let n = self.title_lines.len();
+        let lines = if n > 1 { &self.title_lines[..n - 1] } else { &self.title_lines[..] };
+        (!lines.is_empty()).then(|| lines.join(" "))
+    }
+}
+
 impl Header {
     pub fn parse(rom: &[u8]) -> Self {
         let mut game_code = [0u8; 4];
@@ -353,6 +414,28 @@ impl SaveState for GameCard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn banner_icon_and_title() {
+        let mut b = vec![0u8; BANNER_SIZE];
+        b[0] = 1;
+        // Palette: index 1 = pure red (BGR555 0x001F).
+        b[0x222..0x224].copy_from_slice(&0x001Fu16.to_le_bytes());
+        // Tile 0, row 0: pixel 0 = index 1, pixel 1 = index 0.
+        b[0x20] = 0x01;
+        let title: Vec<u16> = "Animal Crossing\nWild World\nNintendo".encode_utf16().collect();
+        for (i, u) in title.iter().enumerate() {
+            b[0x340 + i * 2..][..2].copy_from_slice(&u.to_le_bytes());
+        }
+        let banner = parse_banner(&b).unwrap();
+        assert_eq!(banner.icon[0], 0xFF00_00FF, "opaque red in RGBA byte order");
+        assert_eq!(banner.icon[1], 0, "index 0 is transparent");
+        assert_eq!(banner.display_title().unwrap(), "Animal Crossing Wild World");
+        assert!(parse_banner(&b[..0x100]).is_none());
+        let mut header = vec![0u8; 0x200];
+        header[0x68..0x6C].copy_from_slice(&0x1234_5600u32.to_le_bytes());
+        assert_eq!(banner_offset(&header), 0x1234_5600);
+    }
 
     fn rom() -> Vec<u8> {
         let mut r = vec![0u8; 0x20000];
