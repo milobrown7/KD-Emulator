@@ -1,0 +1,10 @@
+[package]
+name = "cpu-ppc"
+description = "IBM Gekko / Broadway PowerPC 750 core: interpreter, NEON paired singles, 4 KB software TLB over 16 KB host pages, AArch64 basic-block JIT"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kd-core.workspace = true
+tracing.workspace = true
