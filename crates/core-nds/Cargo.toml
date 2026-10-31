@@ -1,0 +1,11 @@
+[package]
+name = "core-nds"
+description = "Nintendo DS core: lockstep ARM9/ARM7, IPC, 9-bank VRAM, dual 2D engines, 3D geometry engine and rasterizer, SPI touchscreen/firmware, RTC and game card"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kd-core.workspace = true
+cpu-arm.workspace = true
+tracing.workspace = true

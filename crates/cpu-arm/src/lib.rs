@@ -18,6 +18,7 @@ mod arm;
 pub mod asm;
 pub mod cp15;
 mod cpu;
+pub mod hle;
 mod thumb;
 
 pub use cpu::*;
