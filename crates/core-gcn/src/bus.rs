@@ -37,6 +37,8 @@ pub trait HollywoodHooks: Send {
     fn mem2(&mut self) -> &mut [u8];
     /// Interrupt towards the PPC (PI bit 14).
     fn interrupt(&self) -> bool;
+    /// Downcasting access for the owning Wii core.
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
 }
 
 /// Video Interface registers (16-bit, some accessed as 32-bit pairs).
