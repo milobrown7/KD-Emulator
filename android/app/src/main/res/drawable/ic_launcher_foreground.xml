@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A simple leaf on a sand circle (original artwork). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#5FAD56"
+        android:pathData="M54,26 C72,30 80,48 74,64 C70,74 60,80 50,80 C44,80 38,77 35,73 C33,58 38,38 54,26 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#2F6B2A"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M38,78 C46,62 54,48 62,36" />
+</vector>

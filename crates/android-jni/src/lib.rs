@@ -540,9 +540,23 @@ mod tests {
 
     #[test]
     fn button_bits_match_kotlin_constants() {
-        // Mirrors android/app/src/main/kotlin/com/kdemulator/bridge/NativeEmulatorBridge.kt
-        for (i, (_, bit)) in BUTTON_BITS.iter().enumerate() {
-            assert_eq!(*bit, 1 << i);
+        let kt = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../android/app/src/main/kotlin/com/kdemulator/bridge/NativeEmulatorBridge.kt"
+        ))
+        .expect("Kotlin bridge source");
+        let kotlin: std::collections::HashMap<&str, u32> = kt
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("const val "))
+            .filter_map(|l| {
+                let (name, expr) = l.split_once(" = ")?;
+                let shift = expr.trim().strip_prefix("1 shl ")?.parse::<u32>().ok()?;
+                Some((name.trim(), 1u32 << shift))
+            })
+            .collect();
+        assert_eq!(kotlin.len(), BUTTON_BITS.len(), "Kotlin Buttons and BUTTON_BITS list different buttons");
+        for (name, bit) in BUTTON_BITS {
+            assert_eq!(kotlin.get(name), Some(&bit), "button {name}");
         }
     }
 
