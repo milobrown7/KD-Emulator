@@ -45,7 +45,7 @@ fn ipc_call(c: &mut Vec<u32>, req: u32, save: u32) {
     store_word(c, 0xCD00_0000, req); // PPCMSG
     store_word(c, 0xCD00_0004, 0x6); // ack Y1|Y2 left from earlier calls
     store_word(c, 0xCD00_0004, 0x1); // X1: execute
-    // poll: lwz r6, 4(r30); andi. r6, r6, 2; beq poll
+                                     // poll: lwz r6, 4(r30); andi. r6, r6, 2; beq poll
     c.push(lwz(6, 30, 4));
     c.push(andi_dot(6, 6, 2));
     c.push(beq(-8));

@@ -131,7 +131,8 @@ pub(crate) fn execute<B: Bus>(cpu: &mut Arm, bus: &mut B, insn: u16) {
         Op::AddSub => {
             let rs = cpu.r[lo3(insn, 3)];
             let operand = if insn & (1 << 10) != 0 { ((insn >> 6) & 7) as u32 } else { cpu.r[lo3(insn, 6)] };
-            let v = if insn & (1 << 9) != 0 { cpu.sub_flags(rs, operand, true) } else { cpu.add_flags(rs, operand, false) };
+            let v =
+                if insn & (1 << 9) != 0 { cpu.sub_flags(rs, operand, true) } else { cpu.add_flags(rs, operand, false) };
             cpu.r[lo3(insn, 0)] = v;
         }
         Op::Imm => {

@@ -145,7 +145,11 @@ mod neon {
     pub unsafe fn arith(op: PsOp, a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
         // Inputs that are not exactly representable in single precision
         // must go through the double-precision reference path.
-        if round_single(a[0]) != a[0] || round_single(a[1]) != a[1] || round_single(b[0]) != b[0] || round_single(b[1]) != b[1] {
+        if round_single(a[0]) != a[0]
+            || round_single(a[1]) != a[1]
+            || round_single(b[0]) != b[0]
+            || round_single(b[1]) != b[1]
+        {
             return ps_arith_scalar(op, a, b);
         }
         let (va, vb) = (load(a), load(b));

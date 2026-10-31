@@ -327,4 +327,3 @@ fn lz77_decompression() {
     gba.run_cycles(20_000);
     assert_eq!(&gba.bus.ewram[0x100..0x10C], b"ABCABCABCABC");
 }
-

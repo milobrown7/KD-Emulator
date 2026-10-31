@@ -33,15 +33,37 @@ impl Primitive {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GxCommand {
     Nop,
-    LoadCp { reg: u8, value: u32 },
-    LoadXf { addr: u16, values: Vec<u32> },
+    LoadCp {
+        reg: u8,
+        value: u32,
+    },
+    LoadXf {
+        addr: u16,
+        values: Vec<u32>,
+    },
     /// LOAD_INDX_A..D: copy `len` words from array `array` element `index`
     /// into XF memory at `addr`.
-    LoadIndexed { array: u8, index: u16, len: u8, addr: u16 },
-    CallDisplayList { addr: u32, size: u32 },
+    LoadIndexed {
+        array: u8,
+        index: u16,
+        len: u8,
+        addr: u16,
+    },
+    CallDisplayList {
+        addr: u32,
+        size: u32,
+    },
     InvalidateVertexCache,
-    LoadBp { reg: u8, value: u32 },
-    Draw { primitive: Primitive, vat: u8, count: u16, data: Vec<u8> },
+    LoadBp {
+        reg: u8,
+        value: u32,
+    },
+    Draw {
+        primitive: Primitive,
+        vat: u8,
+        count: u16,
+        data: Vec<u8>,
+    },
     Unknown(u8),
 }
 

@@ -69,7 +69,10 @@ pub fn ir_basic(i: &InputState) -> [u8; 10] {
     if let Some([(x1, y1), (x2, y2)]) = ir_dots(i) {
         out[0] = x1 as u8;
         out[1] = y1 as u8;
-        out[2] = ((y1 >> 8) as u8 & 3) << 6 | ((x1 >> 8) as u8 & 3) << 4 | ((y2 >> 8) as u8 & 3) << 2 | ((x2 >> 8) as u8 & 3);
+        out[2] = ((y1 >> 8) as u8 & 3) << 6
+            | ((x1 >> 8) as u8 & 3) << 4
+            | ((y2 >> 8) as u8 & 3) << 2
+            | ((x2 >> 8) as u8 & 3);
         out[3] = x2 as u8;
         out[4] = y2 as u8;
     }

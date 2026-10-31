@@ -131,8 +131,9 @@ impl Ios {
             IPC_IOCTL => self.ioctl(mem, fd, a[0], (a[1], a[2] as usize), (a[3], a[4] as usize)),
             IPC_IOCTLV => {
                 let (n_in, n_io) = (a[1] as usize, a[2] as usize);
-                let vecs: Vec<(u32, usize)> =
-                    (0..n_in + n_io).map(|i| (mem.read32(a[3] + i as u32 * 8), mem.read32(a[3] + i as u32 * 8 + 4) as usize)).collect();
+                let vecs: Vec<(u32, usize)> = (0..n_in + n_io)
+                    .map(|i| (mem.read32(a[3] + i as u32 * 8), mem.read32(a[3] + i as u32 * 8 + 4) as usize))
+                    .collect();
                 self.ioctlv(mem, fd, a[0], &vecs[..n_in], &vecs[n_in..])
             }
             _ => IPC_EINVAL,
@@ -223,7 +224,14 @@ impl Ios {
         }
     }
 
-    fn ioctlv(&mut self, mem: &mut dyn IosMemory, fd: u32, req: u32, ins: &[(u32, usize)], ios: &[(u32, usize)]) -> i32 {
+    fn ioctlv(
+        &mut self,
+        mem: &mut dyn IosMemory,
+        fd: u32,
+        req: u32,
+        ins: &[(u32, usize)],
+        ios: &[(u32, usize)],
+    ) -> i32 {
         let Some(h) = self.handles.get(&fd).cloned() else { return IPC_EINVAL };
         match (h, req) {
             // ES_GetTitleID
@@ -305,7 +313,8 @@ impl Ios {
             // GetStats: cluster size, free/used clusters, inodes...
             0x02 => {
                 let used: usize = self.nand.files.values().map(|f| f.len().div_ceil(0x4000)).sum();
-                let stats = [0x4000u32, 0x7800 - used as u32, used as u32, 0, 0, 0x4000 - self.nand.files.len() as u32, 0];
+                let stats =
+                    [0x4000u32, 0x7800 - used as u32, used as u32, 0, 0, 0x4000 - self.nand.files.len() as u32, 0];
                 for (i, v) in stats.iter().enumerate() {
                     mem.write32(out.0 + i as u32 * 4, *v);
                 }
@@ -492,7 +501,8 @@ impl IpcRegs {
     }
 
     pub fn interrupt(&self) -> bool {
-        let pending = (self.ppcctrl & CTRL_Y1 != 0 && self.ppcctrl & CTRL_IY1 != 0) || (self.ppcctrl & CTRL_Y2 != 0 && self.ppcctrl & CTRL_IY2 != 0);
+        let pending = (self.ppcctrl & CTRL_Y1 != 0 && self.ppcctrl & CTRL_IY1 != 0)
+            || (self.ppcctrl & CTRL_Y2 != 0 && self.ppcctrl & CTRL_IY2 != 0);
         pending && self.irq_flag & self.irq_mask & IRQ_IPC != 0
     }
 }

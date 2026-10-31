@@ -288,7 +288,11 @@ fn data_processing<B: Bus>(cpu: &mut Arm, bus: &mut B, insn: u32) {
         0x3 => (if set_flags { cpu.sub_flags(op2, rn, true) } else { op2.wrapping_sub(rn) }, true),
         0x4 => (if set_flags { cpu.add_flags(rn, op2, false) } else { rn.wrapping_add(op2) }, true),
         0x5 => (
-            if set_flags { cpu.add_flags(rn, op2, carry_in) } else { rn.wrapping_add(op2).wrapping_add(carry_in as u32) },
+            if set_flags {
+                cpu.add_flags(rn, op2, carry_in)
+            } else {
+                rn.wrapping_add(op2).wrapping_add(carry_in as u32)
+            },
             true,
         ),
         0x6 => (

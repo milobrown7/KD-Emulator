@@ -28,7 +28,8 @@ impl Header {
         let get = |r: std::ops::Range<usize>| rom.get(r).unwrap_or(&[]).to_vec();
         let title = String::from_utf8_lossy(&get(0xA0..0xAC)).trim_end_matches('\0').trim().to_string();
         let mut game_code = [0u8; 4];
-        game_code.copy_from_slice(&get(0xAC..0xB0).iter().copied().chain(std::iter::repeat(0)).take(4).collect::<Vec<_>>());
+        game_code
+            .copy_from_slice(&get(0xAC..0xB0).iter().copied().chain(std::iter::repeat(0)).take(4).collect::<Vec<_>>());
         let mut maker = [0u8; 2];
         maker.copy_from_slice(&get(0xB0..0xB2).iter().copied().chain(std::iter::repeat(0)).take(2).collect::<Vec<_>>());
         let checksum_ok = rom.len() >= 0xC0 && {
@@ -267,11 +268,8 @@ impl Backup {
         match self.eeprom_state {
             EepromState::Reading { data, count } => {
                 let out = if count < 4 { 0 } else { ((data >> (63 - (count - 4))) & 1) as u16 };
-                self.eeprom_state = if count + 1 == 68 {
-                    EepromState::Idle
-                } else {
-                    EepromState::Reading { data, count: count + 1 }
-                };
+                self.eeprom_state =
+                    if count + 1 == 68 { EepromState::Idle } else { EepromState::Reading { data, count: count + 1 } };
                 out
             }
             _ => 1, // ready

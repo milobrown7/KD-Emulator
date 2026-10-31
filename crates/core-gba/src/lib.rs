@@ -24,7 +24,8 @@ use cpu_arm::{Arm, CpuModel, MODE_SYS};
 use kd_core::animal_crossing::{self, AcSetup};
 use kd_core::input::button;
 use kd_core::{
-    EmulatorCore, FrameView, GuestClock, InputState, SaveState, StateReader, StateResult, StateWriter, StereoFrame, System,
+    EmulatorCore, FrameView, GuestClock, InputState, SaveState, StateReader, StateResult, StateWriter, StereoFrame,
+    System,
 };
 
 /// Multiboot images are loaded at the start of EWRAM and entered here.

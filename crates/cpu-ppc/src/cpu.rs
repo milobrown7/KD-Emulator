@@ -550,7 +550,8 @@ impl Ppc {
                 self.gpr[rd(insn)] = a.wrapping_add(insn << 16);
             }
             16 => {
-                let target = if insn & 2 != 0 { simm(insn & 0xFFFC) } else { self.pc.wrapping_add(simm(insn & 0xFFFC)) };
+                let target =
+                    if insn & 2 != 0 { simm(insn & 0xFFFC) } else { self.pc.wrapping_add(simm(insn & 0xFFFC)) };
                 self.branch_cond(insn, target, true);
             }
             17 => self.exception(EXC_SYSCALL, self.pc.wrapping_add(4), 0),
@@ -1008,7 +1009,7 @@ impl Ppc {
                 }
             }
             54 | 86 | 246 | 278 | 470 | 566 | 598 | 854 => {} // cache hints, sync, eieio
-            310 | 438 => {}                                // eciwx/ecowx
+            310 | 438 => {}                                   // eciwx/ecowx
             _ => self.illegal(insn),
         }
     }

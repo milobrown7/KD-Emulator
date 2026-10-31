@@ -283,7 +283,8 @@ impl Gpu3d {
             0x620..=0x62F => self.pos_result[((off - 0x620) / 4) as usize] as u32,
             0x630..=0x635 => {
                 let i = ((off - 0x630) / 2) as usize;
-                self.vec_result[i] as u16 as u32 | (self.vec_result.get(i + 1).copied().unwrap_or(0) as u16 as u32) << 16
+                self.vec_result[i] as u16 as u32
+                    | (self.vec_result.get(i + 1).copied().unwrap_or(0) as u16 as u32) << 16
             }
             0x640..=0x67F => {
                 let clip = if self.clip_dirty { mat_mul(&self.pos, &self.proj) } else { self.clip };
@@ -543,12 +544,20 @@ impl Gpu3d {
                 }
             }
             0x23 => self.vertex([sext(p[0] & 0xFFFF, 16), sext(p[0] >> 16, 16), sext(p[1] & 0xFFFF, 16)]),
-            0x24 => self.vertex([sext(p[0] & 0x3FF, 10) << 6, sext((p[0] >> 10) & 0x3FF, 10) << 6, sext((p[0] >> 20) & 0x3FF, 10) << 6]),
+            0x24 => self.vertex([
+                sext(p[0] & 0x3FF, 10) << 6,
+                sext((p[0] >> 10) & 0x3FF, 10) << 6,
+                sext((p[0] >> 20) & 0x3FF, 10) << 6,
+            ]),
             0x25 => self.vertex([sext(p[0] & 0xFFFF, 16), sext(p[0] >> 16, 16), self.last_vtx[2]]),
             0x26 => self.vertex([sext(p[0] & 0xFFFF, 16), self.last_vtx[1], sext(p[0] >> 16, 16)]),
             0x27 => self.vertex([self.last_vtx[0], sext(p[0] & 0xFFFF, 16), sext(p[0] >> 16, 16)]),
             0x28 => {
-                let d = [sext(p[0] & 0x3FF, 10) << 3, sext((p[0] >> 10) & 0x3FF, 10) << 3, sext((p[0] >> 20) & 0x3FF, 10) << 3];
+                let d = [
+                    sext(p[0] & 0x3FF, 10) << 3,
+                    sext((p[0] >> 10) & 0x3FF, 10) << 3,
+                    sext((p[0] >> 20) & 0x3FF, 10) << 3,
+                ];
                 let v = [self.last_vtx[0] + d[0], self.last_vtx[1] + d[1], self.last_vtx[2] + d[2]];
                 self.vertex(v);
             }
@@ -569,7 +578,11 @@ impl Gpu3d {
             }
             0x32 => {
                 let n = (p[0] >> 30) as usize;
-                let d = [sext(p[0] & 0x3FF, 10) << 3, sext((p[0] >> 10) & 0x3FF, 10) << 3, sext((p[0] >> 20) & 0x3FF, 10) << 3];
+                let d = [
+                    sext(p[0] & 0x3FF, 10) << 3,
+                    sext((p[0] >> 10) & 0x3FF, 10) << 3,
+                    sext((p[0] >> 20) & 0x3FF, 10) << 3,
+                ];
                 let t = vec_mul([d[0], d[1], d[2], 0], &self.vec);
                 self.lights[n].dir = [t[0], t[1], t[2]];
                 // half vector between the light and the line of sight (0,0,-1)
@@ -593,7 +606,12 @@ impl Gpu3d {
                 self.swap_flags = p[0] & 3;
             }
             0x60 => {
-                self.viewport = [(p[0] & 0xFF) as i32, ((p[0] >> 8) & 0xFF) as i32, ((p[0] >> 16) & 0xFF) as i32, (p[0] >> 24) as i32];
+                self.viewport = [
+                    (p[0] & 0xFF) as i32,
+                    ((p[0] >> 8) & 0xFF) as i32,
+                    ((p[0] >> 16) & 0xFF) as i32,
+                    (p[0] >> 24) as i32,
+                ];
             }
             0x70 => self.box_result = true,
             0x71 => {
@@ -602,7 +620,11 @@ impl Gpu3d {
                 self.pos_result = vec_mul(v, &self.clip);
             }
             0x72 => {
-                let d = [sext(p[0] & 0x3FF, 10) << 3, sext((p[0] >> 10) & 0x3FF, 10) << 3, sext((p[0] >> 20) & 0x3FF, 10) << 3];
+                let d = [
+                    sext(p[0] & 0x3FF, 10) << 3,
+                    sext((p[0] >> 10) & 0x3FF, 10) << 3,
+                    sext((p[0] >> 20) & 0x3FF, 10) << 3,
+                ];
                 let t = vec_mul([d[0], d[1], d[2], 0], &self.vec);
                 self.vec_result = [t[0] as i16, t[1] as i16, t[2] as i16];
             }
@@ -1069,7 +1091,11 @@ fn sample_texture(vram: &Vram, param: u32, pal_base: u32, s: i32, t: i32) -> Opt
             let pbase = (pal_base << 4) + (info & 0x3FFF) * 4;
             let c = |i: u32| pal(pbase + i * 2);
             let mixc = |a: [i32; 3], b: [i32; 3], wa: i32, wb: i32| {
-                [(a[0] * wa + b[0] * wb) / (wa + wb), (a[1] * wa + b[1] * wb) / (wa + wb), (a[2] * wa + b[2] * wb) / (wa + wb)]
+                [
+                    (a[0] * wa + b[0] * wb) / (wa + wb),
+                    (a[1] * wa + b[1] * wb) / (wa + wb),
+                    (a[2] * wa + b[2] * wb) / (wa + wb),
+                ]
             };
             let color = match (info >> 14, texel_bits) {
                 (0 | 1, 3) => return None,
@@ -1279,7 +1305,7 @@ mod tests {
     fn direct_color_texture() {
         let mut vram = Vram::new();
         vram.set_cnt(0, 0x83); // A → texture slot 0
-        // 8x8 direct-colour texture, every texel opaque green
+                               // 8x8 direct-colour texture, every texel opaque green
         for i in 0..64 {
             vram.write16(View::Texture, i * 2, 0x8000 | 0x03E0);
         }

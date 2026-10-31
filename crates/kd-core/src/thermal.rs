@@ -194,7 +194,8 @@ mod tests {
 
     #[test]
     fn moderate_enables_mitigations() {
-        let mut p = ThermalPolicy::new(UserGraphicsPrefs { internal_scale: 3, dsp_lle: true, async_ubershaders: false });
+        let mut p =
+            ThermalPolicy::new(UserGraphicsPrefs { internal_scale: 3, dsp_lle: true, async_ubershaders: false });
         let cool = p.knobs();
         assert_eq!(cool.dsp_mode, DspMode::Lle);
         assert!(!cool.async_ubershaders);

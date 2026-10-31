@@ -100,7 +100,8 @@ impl SerialInterface {
                     0 => p.out,
                     4 | 8 => {
                         if !p.connected || p.joybus.is_some() {
-                            return if off % 0xC == 4 { 0x8000_0000 } else { 0 }; // no response
+                            return if off % 0xC == 4 { 0x8000_0000 } else { 0 };
+                            // no response
                         }
                         let (hi, lo) = controller_report(&p.input);
                         self.sr &= !(0x2000_0000 >> (ch * 8)); // clear RDST
@@ -193,7 +194,12 @@ mod tests {
 
     #[test]
     fn poll_report_encodes_buttons_and_sticks() {
-        let input = InputState { buttons: button::A | button::START, stick: (1.0, -1.0), triggers: (0.0, 1.0), ..Default::default() };
+        let input = InputState {
+            buttons: button::A | button::START,
+            stick: (1.0, -1.0),
+            triggers: (0.0, 1.0),
+            ..Default::default()
+        };
         let (hi, lo) = controller_report(&input);
         assert_eq!(hi >> 16, 0x1180);
         assert_eq!((hi >> 8) & 0xFF, 255);

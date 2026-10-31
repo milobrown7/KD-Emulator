@@ -102,7 +102,8 @@ impl VulkanContext {
             efb_scale,
         );
         let priorities = [1.0f32];
-        let queue_info = vk::DeviceQueueCreateInfo::default().queue_family_index(queue_family).queue_priorities(&priorities);
+        let queue_info =
+            vk::DeviceQueueCreateInfo::default().queue_family_index(queue_family).queue_priorities(&priorities);
         let dev_ext_ptrs: Vec<*const std::ffi::c_char> = device_exts.iter().map(|e| e.as_ptr()).collect();
         let dev_info = vk::DeviceCreateInfo::default()
             .queue_create_infos(std::slice::from_ref(&queue_info))
@@ -118,7 +119,12 @@ impl VulkanContext {
     }
 
     fn cache_key(p: &vk::PhysicalDeviceProperties) -> CacheKey {
-        CacheKey { vendor_id: p.vendor_id, device_id: p.device_id, driver_version: p.driver_version, uuid: p.pipeline_cache_uuid }
+        CacheKey {
+            vendor_id: p.vendor_id,
+            device_id: p.device_id,
+            driver_version: p.driver_version,
+            uuid: p.pipeline_cache_uuid,
+        }
     }
 
     pub fn device_name(&self) -> String {
@@ -142,31 +148,37 @@ impl VulkanContext {
         let (width, height) = self.profile.efb_size();
         let samples = vk::SampleCountFlags::from_raw(self.profile.samples);
         let transient = self.profile.transient_efb;
-        let make_image = |format: vk::Format, usage: vk::ImageUsageFlags| -> Result<(vk::Image, vk::DeviceMemory), VkError> {
-            let info = vk::ImageCreateInfo::default()
-                .image_type(vk::ImageType::TYPE_2D)
-                .format(format)
-                .extent(vk::Extent3D { width, height, depth: 1 })
-                .mip_levels(1)
-                .array_layers(1)
-                .samples(samples)
-                .tiling(vk::ImageTiling::OPTIMAL)
-                .usage(usage)
-                .initial_layout(vk::ImageLayout::UNDEFINED);
-            let image = unsafe { self.device.create_image(&info, None)? };
-            let req = unsafe { self.device.get_image_memory_requirements(image) };
-            let lazy = usage.contains(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT);
-            let ty = (if lazy { self.memory_type(req.memory_type_bits, vk::MemoryPropertyFlags::LAZILY_ALLOCATED) } else { None })
+        let make_image =
+            |format: vk::Format, usage: vk::ImageUsageFlags| -> Result<(vk::Image, vk::DeviceMemory), VkError> {
+                let info = vk::ImageCreateInfo::default()
+                    .image_type(vk::ImageType::TYPE_2D)
+                    .format(format)
+                    .extent(vk::Extent3D { width, height, depth: 1 })
+                    .mip_levels(1)
+                    .array_layers(1)
+                    .samples(samples)
+                    .tiling(vk::ImageTiling::OPTIMAL)
+                    .usage(usage)
+                    .initial_layout(vk::ImageLayout::UNDEFINED);
+                let image = unsafe { self.device.create_image(&info, None)? };
+                let req = unsafe { self.device.get_image_memory_requirements(image) };
+                let lazy = usage.contains(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT);
+                let ty = (if lazy {
+                    self.memory_type(req.memory_type_bits, vk::MemoryPropertyFlags::LAZILY_ALLOCATED)
+                } else {
+                    None
+                })
                 .or_else(|| self.memory_type(req.memory_type_bits, vk::MemoryPropertyFlags::DEVICE_LOCAL))
                 .ok_or(VkError::NoDevice)?;
-            let alloc = vk::MemoryAllocateInfo::default().allocation_size(req.size).memory_type_index(ty);
-            let memory = unsafe { self.device.allocate_memory(&alloc, None)? };
-            unsafe { self.device.bind_image_memory(image, memory, 0)? };
-            Ok((image, memory))
-        };
+                let alloc = vk::MemoryAllocateInfo::default().allocation_size(req.size).memory_type_index(ty);
+                let memory = unsafe { self.device.allocate_memory(&alloc, None)? };
+                unsafe { self.device.bind_image_memory(image, memory, 0)? };
+                Ok((image, memory))
+            };
         // Colour must be copyable for EFB copies; depth can stay in tile
         // memory on Mali.
-        let color_usage = vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC | vk::ImageUsageFlags::SAMPLED;
+        let color_usage =
+            vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC | vk::ImageUsageFlags::SAMPLED;
         let mut depth_usage = vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT;
         if transient {
             depth_usage |= vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::INPUT_ATTACHMENT;
@@ -190,8 +202,10 @@ impl VulkanContext {
                 .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
         ];
         let color_ref = [vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL }];
-        let depth_ref = vk::AttachmentReference { attachment: 1, layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
-        let depth_input = [vk::AttachmentReference { attachment: 1, layout: vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL }];
+        let depth_ref =
+            vk::AttachmentReference { attachment: 1, layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+        let depth_input =
+            [vk::AttachmentReference { attachment: 1, layout: vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL }];
         let draw = vk::SubpassDescription::default()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
             .color_attachments(&color_ref)
@@ -222,7 +236,12 @@ impl VulkanContext {
     /// Record the SSAA resolve: blit the scaled EFB down to `dst` with
     /// linear filtering (used instead of MSAA on PowerVR DXT).
     pub fn record_downscale(&self, cmd: vk::CommandBuffer, efb: &Efb, dst: vk::Image, dst_w: u32, dst_h: u32) {
-        let sub = vk::ImageSubresourceLayers { aspect_mask: vk::ImageAspectFlags::COLOR, mip_level: 0, base_array_layer: 0, layer_count: 1 };
+        let sub = vk::ImageSubresourceLayers {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            mip_level: 0,
+            base_array_layer: 0,
+            layer_count: 1,
+        };
         let region = vk::ImageBlit::default()
             .src_subresource(sub)
             .src_offsets([vk::Offset3D::default(), vk::Offset3D { x: efb.width as i32, y: efb.height as i32, z: 1 }])

@@ -19,7 +19,7 @@ use core_gcn::bus::HollywoodHooks;
 use core_gcn::disc::{Disc, DiscHeader};
 use core_gcn::{BootError, GameCube};
 use cpu_ppc::PpcModel;
-use ios::{IosMemory, IpcRegs, Ios};
+use ios::{Ios, IosMemory, IpcRegs};
 use kd_core::animal_crossing::{self, AcSetup};
 use kd_core::arena::PageAwareArena;
 use kd_core::{EmulatorCore, FrameView, GuestClock, InputState, StateResult, StereoFrame, System};
@@ -71,7 +71,12 @@ pub struct Hollywood {
 
 impl Hollywood {
     pub fn new() -> std::io::Result<Self> {
-        Ok(Self { mem2: PageAwareArena::new(c"kd_wii_mem2", MEM2_SIZE)?, ipc: IpcRegs::default(), ios: Ios::new(), regs: vec![0; 0x100] })
+        Ok(Self {
+            mem2: PageAwareArena::new(c"kd_wii_mem2", MEM2_SIZE)?,
+            ipc: IpcRegs::default(),
+            ios: Ios::new(),
+            regs: vec![0; 0x100],
+        })
     }
 }
 

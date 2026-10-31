@@ -24,7 +24,11 @@ pub enum GxEvent {
     Token(u16),
     TokenInterrupt(u16),
     /// EFB → XFB copy finished (end of frame).
-    XfbCopy { addr: u32, width: u16, height: u16 },
+    XfbCopy {
+        addr: u32,
+        width: u16,
+        height: u16,
+    },
 }
 
 pub const TMEM_SIZE: usize = 0x10_0000;
@@ -101,7 +105,9 @@ impl Gx {
                 }
             }
             GxCommand::LoadBp { reg, value } => self.write_bp(reg, value, mem),
-            GxCommand::Draw { primitive, vat, count, data } => self.draw(primitive, vat as usize, count as usize, &data, mem),
+            GxCommand::Draw { primitive, vat, count, data } => {
+                self.draw(primitive, vat as usize, count as usize, &data, mem)
+            }
             GxCommand::Unknown(op) => tracing::warn!("unknown GX opcode {op:#04x}"),
         }
     }

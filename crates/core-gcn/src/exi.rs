@@ -105,7 +105,14 @@ const STATUS_UNLOCKED: u8 = 0x40;
 
 impl MemoryCard {
     pub fn new(model: MemoryCardModel) -> Self {
-        Self { model, data: vec![0xFF; model.bytes()], dirty: false, cmd: None, args: Vec::new(), status: STATUS_READY | STATUS_UNLOCKED }
+        Self {
+            model,
+            data: vec![0xFF; model.bytes()],
+            dirty: false,
+            cmd: None,
+            args: Vec::new(),
+            status: STATUS_READY | STATUS_UNLOCKED,
+        }
     }
 
     fn address(&self) -> usize {

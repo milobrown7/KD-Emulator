@@ -176,7 +176,11 @@ pub fn decode(fmt: TexFormat, data: &[u8], w: usize, h: usize, tlut: &[u8], tlut
                 TexFormat::I8 | TexFormat::C8 => {
                     for (i, &b) in blk.iter().enumerate() {
                         let v = b as u32;
-                        let c = if fmt == TexFormat::I8 { rgba(v, v, v, v) } else { tlut_color(tlut, tlut_fmt, v as usize) };
+                        let c = if fmt == TexFormat::I8 {
+                            rgba(v, v, v, v)
+                        } else {
+                            tlut_color(tlut, tlut_fmt, v as usize)
+                        };
                         put(x0 + i % 8, y0 + i / 8, c);
                     }
                 }

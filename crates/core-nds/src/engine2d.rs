@@ -124,7 +124,15 @@ impl Engine2d {
     /// Render line `y` into `out` (BGR555 per pixel, before master
     /// brightness). `layer3d` is engine A's 3D output for this line
     /// (RGB555 | alpha << 16, alpha 0 = transparent).
-    pub fn render_line(&mut self, y: usize, vram: &Vram, palette: &[u8], oam: &[u8], layer3d: Option<&[u32]>, out: &mut [u16]) {
+    pub fn render_line(
+        &mut self,
+        y: usize,
+        vram: &Vram,
+        palette: &[u8],
+        oam: &[u8],
+        layer3d: Option<&[u32]>,
+        out: &mut [u16],
+    ) {
         let dispcnt = self.dispcnt();
         match (dispcnt >> 16) & 3 {
             0 => {
@@ -287,7 +295,11 @@ impl Engine2d {
             if color256 {
                 let idx = vram.read8(bg, char_base + (tile * 64 + ty * 8 + tx) as u32) as usize;
                 if idx != 0 {
-                    *out = if ext { self.ext_color(vram, slot, pal_num * 256 + idx) } else { rd16(palette, idx * 2) & 0x7FFF } as u32;
+                    *out = if ext {
+                        self.ext_color(vram, slot, pal_num * 256 + idx)
+                    } else {
+                        rd16(palette, idx * 2) & 0x7FFF
+                    } as u32;
                 }
             } else {
                 let b = vram.read8(bg, char_base + (tile * 32 + ty * 4 + tx / 2) as u32);

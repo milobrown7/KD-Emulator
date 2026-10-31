@@ -119,7 +119,12 @@ impl SoftTexture {
             }) as usize
         };
         let p = self.pixels[coord(t, self.height, self.wrap[1]) * self.width + coord(s, self.width, self.wrap[0])];
-        [(p & 0xFF) as f32 / 255.0, ((p >> 8) & 0xFF) as f32 / 255.0, ((p >> 16) & 0xFF) as f32 / 255.0, (p >> 24) as f32 / 255.0]
+        [
+            (p & 0xFF) as f32 / 255.0,
+            ((p >> 8) & 0xFF) as f32 / 255.0,
+            ((p >> 16) & 0xFF) as f32 / 255.0,
+            (p >> 24) as f32 / 255.0,
+        ]
     }
 }
 
@@ -204,9 +209,11 @@ impl SoftRenderer {
         self.triangles += 1;
         let [sx0, sy0, sx1, sy1] = rs.scissor;
         let minx = v.iter().map(|p| p.x).fold(f32::MAX, f32::min).floor().max(sx0.max(0) as f32) as i32;
-        let maxx = v.iter().map(|p| p.x).fold(f32::MIN, f32::max).ceil().min((sx1.min(EFB_WIDTH as i32 - 1)) as f32) as i32;
+        let maxx =
+            v.iter().map(|p| p.x).fold(f32::MIN, f32::max).ceil().min((sx1.min(EFB_WIDTH as i32 - 1)) as f32) as i32;
         let miny = v.iter().map(|p| p.y).fold(f32::MAX, f32::min).floor().max(sy0.max(0) as f32) as i32;
-        let maxy = v.iter().map(|p| p.y).fold(f32::MIN, f32::max).ceil().min((sy1.min(EFB_HEIGHT as i32 - 1)) as f32) as i32;
+        let maxy =
+            v.iter().map(|p| p.y).fold(f32::MIN, f32::max).ceil().min((sy1.min(EFB_HEIGHT as i32 - 1)) as f32) as i32;
         let edge = |a: &WinVertex, b: &WinVertex, x: f32, y: f32| (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
         for y in miny..=maxy {
             for x in minx..=maxx {
@@ -306,7 +313,14 @@ mod tests {
         culled.draw_triangle(tri, &tev, &[[0.0; 4]; 4], &[[0.0; 4]; 4], &none, &RasterState { cull: 1, ..rs });
         assert_eq!(culled.pixels_written, 0);
         let mut sc = SoftRenderer::new();
-        sc.draw_triangle(tri, &tev, &[[0.0; 4]; 4], &[[0.0; 4]; 4], &none, &RasterState { scissor: [0, 0, 120, 527], ..rs });
+        sc.draw_triangle(
+            tri,
+            &tev,
+            &[[0.0; 4]; 4],
+            &[[0.0; 4]; 4],
+            &none,
+            &RasterState { scissor: [0, 0, 120, 527], ..rs },
+        );
         assert_eq!(sc.color[150 * EFB_WIDTH + 150], 0xFF00_0000);
         assert_eq!(sc.color[110 * EFB_WIDTH + 110], 0xFF00_00FF);
     }

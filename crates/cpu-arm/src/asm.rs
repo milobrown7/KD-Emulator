@@ -90,10 +90,22 @@ impl Assembler {
 
     /// Data processing with a register operand shifted by an immediate.
     #[allow(clippy::too_many_arguments)]
-    pub fn dp_reg(&mut self, cond: u32, op: Dp, s: bool, rd: u32, rn: u32, rm: u32, shift: u32, amount: u32) -> &mut Self {
+    pub fn dp_reg(
+        &mut self,
+        cond: u32,
+        op: Dp,
+        s: bool,
+        rd: u32,
+        rn: u32,
+        rm: u32,
+        shift: u32,
+        amount: u32,
+    ) -> &mut Self {
         let op = op as u32;
         let s = s || (8..=11).contains(&op);
-        self.word(cond << 28 | op << 21 | (s as u32) << 20 | rn << 16 | rd << 12 | (amount & 31) << 7 | (shift & 3) << 5 | rm)
+        self.word(
+            cond << 28 | op << 21 | (s as u32) << 20 | rn << 16 | rd << 12 | (amount & 31) << 7 | (shift & 3) << 5 | rm,
+        )
     }
 
     pub fn mov_imm(&mut self, rd: u32, imm: u32) -> &mut Self {
@@ -155,7 +167,17 @@ impl Assembler {
         let up = off >= 0;
         let mag = off.unsigned_abs();
         assert!(mag < 4096);
-        self.word(AL << 28 | 1 << 26 | 1 << 24 | (up as u32) << 23 | (byte as u32) << 22 | (load as u32) << 20 | rn << 16 | rd << 12 | mag)
+        self.word(
+            AL << 28
+                | 1 << 26
+                | 1 << 24
+                | (up as u32) << 23
+                | (byte as u32) << 22
+                | (load as u32) << 20
+                | rn << 16
+                | rd << 12
+                | mag,
+        )
     }
 
     pub fn ldr(&mut self, rd: u32, rn: u32, off: i32) -> &mut Self {
@@ -174,7 +196,18 @@ impl Assembler {
     /// `LDRH/STRH rd, [rn, #off]` with 0 <= off < 256.
     fn half(&mut self, load: bool, rd: u32, rn: u32, off: u32) -> &mut Self {
         assert!(off < 256);
-        self.word(AL << 28 | 1 << 24 | 1 << 23 | 1 << 22 | (load as u32) << 20 | rn << 16 | rd << 12 | (off >> 4) << 8 | 0xB << 4 | (off & 0xF))
+        self.word(
+            AL << 28
+                | 1 << 24
+                | 1 << 23
+                | 1 << 22
+                | (load as u32) << 20
+                | rn << 16
+                | rd << 12
+                | (off >> 4) << 8
+                | 0xB << 4
+                | (off & 0xF),
+        )
     }
     pub fn ldrh(&mut self, rd: u32, rn: u32, off: u32) -> &mut Self {
         self.half(true, rd, rn, off)

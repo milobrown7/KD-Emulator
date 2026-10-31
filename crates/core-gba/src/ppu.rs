@@ -462,10 +462,8 @@ impl Ppu {
         let win0h = self.reg(0x40);
         let win1h = self.reg(0x42);
 
-        let mut sorted: Vec<(usize, u16)> = (0..4)
-            .filter(|&n| active[n])
-            .map(|n| (n, self.reg(0x08 + n * 2) & 3))
-            .collect();
+        let mut sorted: Vec<(usize, u16)> =
+            (0..4).filter(|&n| active[n]).map(|n| (n, self.reg(0x08 + n * 2) & 3)).collect();
         sorted.sort_by_key(|&(n, p)| (p, n));
 
         let bldcnt = self.reg(0x50);
@@ -683,7 +681,7 @@ mod tests {
         p.write16(0x08, 0x0100); // char base 0, screen base 0x800
         set_pal(&mut p, 0, 0x7C00); // backdrop blue
         set_pal(&mut p, 1, 0x001F); // red
-        // tile 1: all pixels colour index 1
+                                    // tile 1: all pixels colour index 1
         for b in &mut p.vram[32..64] {
             *b = 0x11;
         }

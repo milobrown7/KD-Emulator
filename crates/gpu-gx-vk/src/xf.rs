@@ -87,7 +87,12 @@ impl XfState {
         } else {
             self.mem[0x100C + ch]
         };
-        [(c >> 24) as f32 / 255.0, ((c >> 16) & 0xFF) as f32 / 255.0, ((c >> 8) & 0xFF) as f32 / 255.0, (c & 0xFF) as f32 / 255.0]
+        [
+            (c >> 24) as f32 / 255.0,
+            ((c >> 16) & 0xFF) as f32 / 255.0,
+            ((c >> 8) & 0xFF) as f32 / 255.0,
+            (c & 0xFF) as f32 / 255.0,
+        ]
     }
 
     /// Model → clip space.
@@ -108,7 +113,12 @@ impl XfState {
             let src = v.tex[i];
             if (30..60).contains(&idx) && idx % 3 == 0 {
                 let base = idx * 4;
-                let row = |r: usize| self.f(base + r * 4) * src[0] + self.f(base + r * 4 + 1) * src[1] + self.f(base + r * 4 + 2) + self.f(base + r * 4 + 3);
+                let row = |r: usize| {
+                    self.f(base + r * 4) * src[0]
+                        + self.f(base + r * 4 + 1) * src[1]
+                        + self.f(base + r * 4 + 2)
+                        + self.f(base + r * 4 + 3)
+                };
                 let (s, tt) = (row(0), row(1));
                 *t = if s.is_finite() && tt.is_finite() && (s != 0.0 || tt != 0.0) { [s, tt] } else { src };
             } else {
@@ -151,7 +161,8 @@ mod tests {
     fn orthographic_maps_to_viewport() {
         let mut xf = XfState::default();
         standard_2d(&mut xf);
-        let v = Vertex { pos: [0.0, 0.0, 0.0], color: [0xFF00_00FF, 0], has_color: [true, false], ..Default::default() };
+        let v =
+            Vertex { pos: [0.0, 0.0, 0.0], color: [0xFF00_00FF, 0], has_color: [true, false], ..Default::default() };
         let c = xf.transform(&v);
         let w = xf.to_window(&c);
         assert_eq!([w[0], w[1]], [320.0, 240.0]);

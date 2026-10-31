@@ -119,7 +119,12 @@ impl CpState {
         VertexLayout {
             pnmtx: lo & 1 != 0,
             texmtx: std::array::from_fn(|i| lo & (2 << i) != 0),
-            pos: AttrFormat { ty: AttrType::from_bits(lo >> 9), count: 2 + (a & 1), format: (a >> 1) & 7, frac: (a >> 4) & 31 },
+            pos: AttrFormat {
+                ty: AttrType::from_bits(lo >> 9),
+                count: 2 + (a & 1),
+                format: (a >> 1) & 7,
+                frac: (a >> 4) & 31,
+            },
             nrm: AttrFormat {
                 ty: AttrType::from_bits(lo >> 11),
                 count: if (a >> 9) & 1 != 0 { 9 } else { 3 },
@@ -195,7 +200,10 @@ fn read_color(d: &[u8], format: u32) -> u32 {
         1 | 2 => (d[0] as u32) << 24 | (d[1] as u32) << 16 | (d[2] as u32) << 8 | 0xFF,
         3 => {
             let v = u16::from_be_bytes([d[0], d[1]]) as u32;
-            ((v >> 12) * 0x11) << 24 | (((v >> 8) & 15) * 0x11) << 16 | (((v >> 4) & 15) * 0x11) << 8 | ((v & 15) * 0x11)
+            ((v >> 12) * 0x11) << 24
+                | (((v >> 8) & 15) * 0x11) << 16
+                | (((v >> 4) & 15) * 0x11) << 8
+                | ((v & 15) * 0x11)
         }
         4 => {
             let v = (d[0] as u32) << 16 | (d[1] as u32) << 8 | d[2] as u32;
@@ -240,7 +248,13 @@ fn fetch_attr(
 
 /// Decode `count` vertices. `mem` reads guest memory for indexed
 /// attributes (array base + index * stride).
-pub fn decode_vertices(cp: &CpState, vat: usize, data: &[u8], count: usize, mem: &dyn Fn(u32, usize) -> Vec<u8>) -> Vec<Vertex> {
+pub fn decode_vertices(
+    cp: &CpState,
+    vat: usize,
+    data: &[u8],
+    count: usize,
+    mem: &dyn Fn(u32, usize) -> Vec<u8>,
+) -> Vec<Vertex> {
     let l = cp.layout(vat);
     let size = cp.vertex_size(vat);
     let default_pnmtx = (cp.matidx_a & 0x3F) as u8;
@@ -265,7 +279,9 @@ pub fn decode_vertices(cp: &CpState, vat: usize, data: &[u8], count: usize, mem:
                 d = &d[1..];
             }
         }
-        if let Some(p) = fetch_attr(&mut d, cp, mem, &l.pos, ARRAY_POS, (l.pos.count * comp_size(l.pos.format)) as usize) {
+        if let Some(p) =
+            fetch_attr(&mut d, cp, mem, &l.pos, ARRAY_POS, (l.pos.count * comp_size(l.pos.format)) as usize)
+        {
             let cs = comp_size(l.pos.format) as usize;
             for c in 0..l.pos.count as usize {
                 vx.pos[c] = read_comp(&p[c * cs..], l.pos.format, l.pos.frac);

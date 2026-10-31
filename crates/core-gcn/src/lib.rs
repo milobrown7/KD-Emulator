@@ -17,7 +17,7 @@ pub mod exi;
 pub mod si;
 
 use bus::{FlipperBus, VideoInterface};
-use cpu_ppc::cpu::{SPR_HID2, MSR_EE, MSR_FP};
+use cpu_ppc::cpu::{MSR_EE, MSR_FP, SPR_HID2};
 use cpu_ppc::{Ppc, PpcBus, PpcModel};
 use disc::{ApploaderHeader, Disc, DiscHeader, Dol, IsoDisc};
 use exi::{IplDevice, MemoryCard};
@@ -96,8 +96,13 @@ impl GameCube {
 
     /// Boot a disc image (.iso/.gcm) through the HLE apploader.
     pub fn from_disc(image: Vec<u8>) -> Result<Self, BootError> {
+        Self::boot_disc(Box::new(IsoDisc::new(image)))
+    }
+
+    /// Boot any [`Disc`] (e.g. one streamed from a file descriptor).
+    pub fn boot_disc(disc: Box<dyn Disc>) -> Result<Self, BootError> {
         let mut gc = Self::new_machine(PpcModel::Gekko)?;
-        gc.insert_disc(Box::new(IsoDisc::new(image)))?;
+        gc.insert_disc(disc)?;
         gc.run_apploader()?;
         Ok(gc)
     }
@@ -114,7 +119,8 @@ impl GameCube {
     /// everything else).
     fn apply_animal_crossing(&mut self) {
         let is_ac = animal_crossing::lookup(System::GameCube, &self.game_id).is_some();
-        let model = if is_ac { self.ac_setup.memory_card.unwrap_or(MemoryCardModel::Card251) } else { MemoryCardModel::Card59 };
+        let model =
+            if is_ac { self.ac_setup.memory_card.unwrap_or(MemoryCardModel::Card251) } else { MemoryCardModel::Card59 };
         self.bus.exi[0].devices[0] = Some(Box::new(MemoryCard::new(model)));
     }
 
@@ -178,7 +184,10 @@ impl GameCube {
         let zeros = vec![0u8; dol.bss_size as usize];
         if dol.bss_size > 0 && dol.bss_size < bus::MEM1_SIZE as u32 {
             // BSS overlapping loaded sections must not be cleared.
-            let overlaps = dol.sections.iter().any(|(a, b)| *a < dol.bss_addr + dol.bss_size && dol.bss_addr < *a + b.len() as u32);
+            let overlaps = dol
+                .sections
+                .iter()
+                .any(|(a, b)| *a < dol.bss_addr + dol.bss_size && dol.bss_addr < *a + b.len() as u32);
             if !overlaps {
                 self.write_virtual(dol.bss_addr, &zeros);
             }
@@ -271,7 +280,9 @@ impl GameCube {
     /// Convert the displayed XFB (YUYV) to RGBA8888.
     fn present(&mut self) {
         let (addr, w, h) = match self.bus.last_xfb {
-            Some((a, w, h)) if a == self.bus.vi.xfb_address() || self.bus.vi.xfb_address() == 0 => (a, w as usize, h as usize),
+            Some((a, w, h)) if a == self.bus.vi.xfb_address() || self.bus.vi.xfb_address() == 0 => {
+                (a, w as usize, h as usize)
+            }
             _ => (self.bus.vi.xfb_address(), 640, 480),
         };
         let ram = self.bus.mem1.as_slice();

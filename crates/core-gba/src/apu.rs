@@ -9,12 +9,8 @@ pub const CYCLES_PER_SAMPLE: u64 = 512;
 /// The PSG frame sequencer runs at 512 Hz.
 pub const CYCLES_PER_FRAME_STEP: u64 = 16_777_216 / 512;
 
-const DUTY: [[u8; 8]; 4] = [
-    [0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 1, 1, 1],
-    [0, 1, 1, 1, 1, 1, 1, 0],
-];
+const DUTY: [[u8; 8]; 4] =
+    [[0, 0, 0, 0, 0, 0, 0, 1], [1, 0, 0, 0, 0, 0, 0, 1], [1, 0, 0, 0, 0, 1, 1, 1], [0, 1, 1, 1, 1, 1, 1, 0]];
 
 #[derive(Debug, Clone, Default)]
 struct Envelope {

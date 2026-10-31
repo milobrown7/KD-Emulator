@@ -84,7 +84,8 @@ pub fn unpack_pipeline_cache<'a>(key: &CacheKey, data: &'a [u8]) -> Option<&'a [
         return None;
     }
     let word = |i: usize| u32::from_le_bytes(data[4 + i * 4..8 + i * 4].try_into().unwrap());
-    if word(0) != CACHE_VERSION || word(1) != key.vendor_id || word(2) != key.device_id || word(3) != key.driver_version {
+    if word(0) != CACHE_VERSION || word(1) != key.vendor_id || word(2) != key.device_id || word(3) != key.driver_version
+    {
         return None;
     }
     if data[20..36] != key.uuid {

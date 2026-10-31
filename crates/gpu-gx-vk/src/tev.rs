@@ -44,7 +44,8 @@ pub enum AlphaComp {
 
 impl AlphaComp {
     fn from_bits(v: u32) -> Self {
-        [Self::Never, Self::Less, Self::Equal, Self::LEqual, Self::Greater, Self::NEqual, Self::GEqual, Self::Always][(v & 7) as usize]
+        [Self::Never, Self::Less, Self::Equal, Self::LEqual, Self::Greater, Self::NEqual, Self::GEqual, Self::Always]
+            [(v & 7) as usize]
     }
     fn eval(self, a: u8, r: u8) -> bool {
         match self {
@@ -272,7 +273,8 @@ pub fn evaluate(cfg: &TevConfig, inp: &TevInputs) -> ([f32; 4], bool) {
             }
         };
         let e = &s.color;
-        let rgb: [f32; 3] = std::array::from_fn(|ch| apply(e, csrc(e.a, ch), csrc(e.b, ch), csrc(e.c, ch), csrc(e.d, ch)));
+        let rgb: [f32; 3] =
+            std::array::from_fn(|ch| apply(e, csrc(e.a, ch), csrc(e.b, ch), csrc(e.c, ch), csrc(e.d, ch)));
         let ea = &s.alpha;
         let a = apply(ea, asrc(ea.a), asrc(ea.b), asrc(ea.c), asrc(ea.d));
         let cd = e.dest as usize;
@@ -331,7 +333,10 @@ pub fn generate_glsl(cfg: &TevConfig) -> String {
             16..=31 => format!("tev.konst[{}][{}]", (st.kasel - 16) % 4, (st.kasel - 16) / 4),
             _ => "1.0".into(),
         };
-        let _ = writeln!(s, "    {{ // stage {i}\n        vec4 tex = {tex}; vec4 ras = {ras}; vec3 kc = {kc}; float ka = {ka};");
+        let _ = writeln!(
+            s,
+            "    {{ // stage {i}\n        vec4 tex = {tex}; vec4 ras = {ras}; vec3 kc = {kc}; float ka = {ka};"
+        );
         let cin = |sel: u8| -> String {
             match sel {
                 0 => "r0.rgb".into(),
@@ -384,7 +389,11 @@ pub fn generate_glsl(cfg: &TevConfig) -> String {
         let ea = &st.alpha;
         let aexpr = expr(ea, ain(ea.a).into(), ain(ea.b).into(), ain(ea.c).into(), ain(ea.d).into(), "0.0");
         let _ = writeln!(s, "        vec3 c_out = {cexpr};\n        float a_out = {aexpr};");
-        let _ = writeln!(s, "        {}.rgb = c_out;\n        {}.a = a_out;\n    }}", reg[e.dest as usize], reg[ea.dest as usize]);
+        let _ = writeln!(
+            s,
+            "        {}.rgb = c_out;\n        {}.a = a_out;\n    }}",
+            reg[e.dest as usize], reg[ea.dest as usize]
+        );
     }
     s.push_str("    vec4 result = clamp(r0, vec4(0.0), vec4(1.0));\n");
     let at = &cfg.alpha_test;

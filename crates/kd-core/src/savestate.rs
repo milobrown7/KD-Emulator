@@ -374,10 +374,7 @@ mod tests {
         let mut w = StateWriter::new();
         w.u32(42);
         let mut file = w.finish(1, *b"ADME\0\0");
-        assert_eq!(
-            StateReader::open(&file, 2).unwrap_err(),
-            StateError::WrongSystem { expected: 2, found: 1 }
-        );
+        assert_eq!(StateReader::open(&file, 2).unwrap_err(), StateError::WrongSystem { expected: 2, found: 1 });
         let last = file.len() - 1;
         file[last] ^= 0xFF;
         assert_eq!(StateReader::open(&file, 1).unwrap_err(), StateError::ChecksumMismatch);

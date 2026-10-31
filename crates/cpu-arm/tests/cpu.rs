@@ -321,19 +321,19 @@ fn thumb_program_with_bl_and_interworking() {
     use asm::thumb as t;
     let bl = t::bl(0x2010 - (0x2008 + 4)); // call sub at 0x2010 from 0x2008
     let thumb = [
-        t::push(0, true),     // 0x2000 push {lr}
-        t::mov_imm(1, 10),    // 0x2002
-        t::mov_imm(2, 0),     // 0x2004
-        t::mov_imm(3, 0),     // 0x2006
-        bl[0],                // 0x2008
-        bl[1],                // 0x200A
-        t::pop(1, false),     // 0x200C pop {r0}  (the saved LR)
-        t::bx(0),             // 0x200E return to ARM
+        t::push(0, true),  // 0x2000 push {lr}
+        t::mov_imm(1, 10), // 0x2002
+        t::mov_imm(2, 0),  // 0x2004
+        t::mov_imm(3, 0),  // 0x2006
+        bl[0],             // 0x2008
+        bl[1],             // 0x200A
+        t::pop(1, false),  // 0x200C pop {r0}  (the saved LR)
+        t::bx(0),          // 0x200E return to ARM
         // sub: r2 = sum 1..=r1
-        t::add_reg(2, 2, 1),  // 0x2010
-        t::sub_imm(1, 1),     // 0x2012 subs r1, #1
-        t::b_cond(1, -4),     // 0x2014 bne 0x2010
-        t::bx(14),            // 0x2016 bx lr (Thumb)
+        t::add_reg(2, 2, 1), // 0x2010
+        t::sub_imm(1, 1),    // 0x2012 subs r1, #1
+        t::b_cond(1, -4),    // 0x2014 bne 0x2010
+        t::bx(14),           // 0x2016 bx lr (Thumb)
     ];
     bus.load_thumb(0x2000, &thumb);
 
@@ -353,14 +353,14 @@ fn thumb_alu_flags() {
     let mut bus = TestBus::new();
     let code = [
         t::mov_imm(0, 0x80),
-        t::lsl(0, 0, 24),    // 0x80000000, C=0
-        t::lsl(1, 0, 1),     // 0, C=1 Z=1
-        t::alu(0xF, 2, 1),   // mvn r2, r1 → 0xFFFFFFFF, N
-        t::alu(0x9, 3, 2),   // neg r3, r2 → 1
+        t::lsl(0, 0, 24),  // 0x80000000, C=0
+        t::lsl(1, 0, 1),   // 0, C=1 Z=1
+        t::alu(0xF, 2, 1), // mvn r2, r1 → 0xFFFFFFFF, N
+        t::alu(0x9, 3, 2), // neg r3, r2 → 1
         t::mov_imm(4, 3),
         t::mov_imm(5, 7),
-        t::alu(0xD, 4, 5),   // mul r4, r5 → 21
-        t::b(-2),            // self loop
+        t::alu(0xD, 4, 5), // mul r4, r5 → 21
+        t::b(-2),          // self loop
     ];
     bus.load_thumb(0x2000, &code);
     let mut cpu = Arm::new(CpuModel::Arm7Tdmi);

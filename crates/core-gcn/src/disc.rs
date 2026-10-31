@@ -42,6 +42,39 @@ impl Disc for IsoDisc {
     }
 }
 
+/// A disc image read on demand from an open file (no full copy in RAM —
+/// GameCube/Wii images are 1.4–8.5 GB).
+pub struct FileDisc {
+    file: std::fs::File,
+    size: u64,
+}
+
+impl FileDisc {
+    pub fn new(file: std::fs::File) -> io::Result<Self> {
+        let size = file.metadata()?.len();
+        Ok(Self { file, size })
+    }
+}
+
+impl Disc for FileDisc {
+    fn read(&mut self, offset: u64, buf: &mut [u8]) -> io::Result<()> {
+        use std::os::unix::fs::FileExt;
+        buf.fill(0);
+        let mut done = 0;
+        while done < buf.len() {
+            let n = self.file.read_at(&mut buf[done..], offset + done as u64)?;
+            if n == 0 {
+                break; // past the end: zero padded
+            }
+            done += n;
+        }
+        Ok(())
+    }
+    fn size(&self) -> u64 {
+        self.size
+    }
+}
+
 pub const GC_MAGIC: u32 = 0xC233_9F3D;
 pub const WII_MAGIC: u32 = 0x5D1C_9EA3;
 

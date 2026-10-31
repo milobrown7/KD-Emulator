@@ -121,10 +121,7 @@ impl GuestClock {
 
     fn base(&self) -> i64 {
         match self.source {
-            ClockSource::Host => SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(0),
+            ClockSource::Host => SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0),
             ClockSource::Fixed(t) => t,
         }
     }

@@ -164,12 +164,8 @@ impl CpuTopology {
             ThreadRole::EmuCpu => &[ClusterKind::Prime, ClusterKind::Mid],
             ThreadRole::GpuWorker | ThreadRole::AudioDsp => &[ClusterKind::Mid],
         };
-        let mut cpus: Vec<usize> = self
-            .clusters
-            .iter()
-            .filter(|c| wanted.contains(&c.kind))
-            .flat_map(|c| c.cpus.iter().copied())
-            .collect();
+        let mut cpus: Vec<usize> =
+            self.clusters.iter().filter(|c| wanted.contains(&c.kind)).flat_map(|c| c.cpus.iter().copied()).collect();
         if cpus.is_empty() {
             cpus = self
                 .clusters

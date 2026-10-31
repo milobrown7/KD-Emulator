@@ -223,11 +223,8 @@ impl Arm {
         let old_fiq = old == MODE_FIQ;
         let new_fiq = new_mode == MODE_FIQ;
         if old_fiq != new_fiq {
-            let (save, load) = if new_fiq {
-                (&mut self.r8_12_usr, &self.r8_12_fiq)
-            } else {
-                (&mut self.r8_12_fiq, &self.r8_12_usr)
-            };
+            let (save, load) =
+                if new_fiq { (&mut self.r8_12_usr, &self.r8_12_fiq) } else { (&mut self.r8_12_fiq, &self.r8_12_usr) };
             save.copy_from_slice(&self.r[8..13]);
             self.r[8..13].copy_from_slice(load);
         }

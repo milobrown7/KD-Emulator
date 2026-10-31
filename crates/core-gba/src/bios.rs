@@ -82,7 +82,7 @@ pub(crate) fn swi(bus: &mut GbaBus, cpu: &mut Arm, n: u8) -> SwiOutcome {
         0x18 => diff16(bus, cpu.r[0], cpu.r[1]),
         0x19 => {} // SoundBias: ramp is instantaneous here
         0x1F => cpu.r[0] = midi_key_to_freq(bus, cpu.r[0], cpu.r[1] as u8, cpu.r[2] as u8),
-        0x25 => cpu.r[0] = 1, // MultiBoot: no link partner → failure
+        0x25 => cpu.r[0] = 1,                         // MultiBoot: no link partner → failure
         0x1A..=0x1E | 0x20..=0x24 | 0x26..=0x2A => {} // sound driver hooks: games ship their own
         _ => tracing::warn!("unimplemented BIOS SWI {n:#04x}"),
     }

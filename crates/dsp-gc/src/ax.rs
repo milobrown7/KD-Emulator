@@ -103,7 +103,7 @@ impl Voice {
         let mut frac = self.word(0x59) as u32;
         let mut adpcm = self.adpcm_state();
         let mut sample = self.pb[0x5A] as i16; // last decoded sample
-        // Fetch one source sample at `cur`, advancing it.
+                                               // Fetch one source sample at `cur`, advancing it.
         let fetch = |cur: &mut u32, adpcm: &mut AdpcmState| -> i16 {
             match format {
                 FORMAT_PCM16 => {
@@ -182,7 +182,9 @@ pub fn mix_frame(mem: &mut dyn AxMemory, first_pb: u32) -> Vec<[i16; 2]> {
         addr = next;
     }
     acc.iter()
-        .map(|a| [a[0].clamp(i16::MIN as i32, i16::MAX as i32) as i16, a[1].clamp(i16::MIN as i32, i16::MAX as i32) as i16])
+        .map(|a| {
+            [a[0].clamp(i16::MIN as i32, i16::MAX as i32) as i16, a[1].clamp(i16::MIN as i32, i16::MAX as i32) as i16]
+        })
         .collect()
 }
 

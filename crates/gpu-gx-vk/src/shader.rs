@@ -40,7 +40,8 @@ pub fn compile(src: &str, stage: Stage) -> Result<Vec<u32>, ShaderError> {
         .map_err(|e| ShaderError(format!("validation error: {e:?}")))?;
     let options = naga::back::spv::Options::default();
     let pipeline = naga::back::spv::PipelineOptions { shader_stage: naga_stage, entry_point: "main".into() };
-    naga::back::spv::write_vec(&module, &info, &options, Some(&pipeline)).map_err(|e| ShaderError(format!("SPIR-V error: {e:?}")))
+    naga::back::spv::write_vec(&module, &info, &options, Some(&pipeline))
+        .map_err(|e| ShaderError(format!("SPIR-V error: {e:?}")))
 }
 
 /// SPIR-V opcodes that terminate a fragment (`discard`).

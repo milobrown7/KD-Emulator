@@ -106,12 +106,7 @@ impl<K: EventKind> Scheduler<K> {
         self.generation[slot] = self.generation[slot].wrapping_add(1);
         self.deadline[slot] = Some(at);
         self.seq += 1;
-        self.heap.push(Reverse(Entry {
-            at,
-            seq: self.seq,
-            generation: self.generation[slot],
-            kind,
-        }));
+        self.heap.push(Reverse(Entry { at, seq: self.seq, generation: self.generation[slot], kind }));
     }
 
     /// Schedule `kind` `delta` cycles after the current clock.

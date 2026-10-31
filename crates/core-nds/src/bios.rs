@@ -68,7 +68,14 @@ fn bios_if_addr9(bus: &Bus9) -> u32 {
 
 const BIOS_IF7: u32 = 0x0380_FFF8;
 
-fn intr_wait<B: Bus>(bus: &mut B, io_ime: &mut bool, active: &mut bool, flag_addr: u32, discard: bool, mask: u32) -> SwiOutcome {
+fn intr_wait<B: Bus>(
+    bus: &mut B,
+    io_ime: &mut bool,
+    active: &mut bool,
+    flag_addr: u32,
+    discard: bool,
+    mask: u32,
+) -> SwiOutcome {
     *io_ime = true;
     let flags = r32(bus, flag_addr);
     if discard && !*active {

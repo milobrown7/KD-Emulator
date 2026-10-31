@@ -71,18 +71,18 @@ impl Vram {
         let k16 = 0x4000;
         let k8 = 0x2000;
         let tables = vec![
-            PageTable::new(0x80000, k16),  // ABg
-            PageTable::new(0x20000, k16),  // BBg
-            PageTable::new(0x40000, k16),  // AObj
-            PageTable::new(0x20000, k16),  // BObj
-            PageTable::new(0xA4000, k16),  // Lcdc
-            PageTable::new(0x40000, k16),  // Arm7
-            PageTable::new(0x80000, k16),  // Texture
-            PageTable::new(0x18000, k16),  // TexPalette
-            PageTable::new(0x8000, k8),    // ABgExtPal
-            PageTable::new(0x8000, k8),    // BBgExtPal
-            PageTable::new(0x2000, k8),    // AObjExtPal
-            PageTable::new(0x2000, k8),    // BObjExtPal
+            PageTable::new(0x80000, k16), // ABg
+            PageTable::new(0x20000, k16), // BBg
+            PageTable::new(0x40000, k16), // AObj
+            PageTable::new(0x20000, k16), // BObj
+            PageTable::new(0xA4000, k16), // Lcdc
+            PageTable::new(0x40000, k16), // Arm7
+            PageTable::new(0x80000, k16), // Texture
+            PageTable::new(0x18000, k16), // TexPalette
+            PageTable::new(0x8000, k8),   // ABgExtPal
+            PageTable::new(0x8000, k8),   // BBgExtPal
+            PageTable::new(0x2000, k8),   // AObjExtPal
+            PageTable::new(0x2000, k8),   // BObjExtPal
         ];
         debug_assert_eq!(tables.len(), VIEWS);
         Self { data: vec![0; VRAM_TOTAL].into_boxed_slice(), cnt: [0; 9], tables }

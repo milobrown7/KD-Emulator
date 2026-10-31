@@ -103,8 +103,12 @@ impl DspCore {
     }
 
     pub fn reset(&mut self, from_iram: bool) {
-        let (iram, irom, dram, coef) =
-            (std::mem::take(&mut self.iram), std::mem::take(&mut self.irom), std::mem::take(&mut self.dram), std::mem::take(&mut self.coef));
+        let (iram, irom, dram, coef) = (
+            std::mem::take(&mut self.iram),
+            std::mem::take(&mut self.irom),
+            std::mem::take(&mut self.dram),
+            std::mem::take(&mut self.coef),
+        );
         *self = Self { iram, irom, dram, coef, ..Self::new() };
         self.pc = if from_iram { 0 } else { 0x8000 };
     }
@@ -701,11 +705,15 @@ mod tests {
     #[test]
     fn immediate_loads_and_accumulator_math() {
         let prog = [
-            0x0080 | AC0M, 0x0010, // lri $ac0.m, #0x10
-            0x0200, 0x0005, // addi $ac0, #5
-            0x0081 | 0x1E, 0x0003, // lri $ac1.m, #3
+            0x0080 | AC0M,
+            0x0010, // lri $ac0.m, #0x10
+            0x0200,
+            0x0005, // addi $ac0, #5
+            0x0081 | 0x1E,
+            0x0003, // lri $ac1.m, #3
             0x4C00, // add $ac0, $ac1  → 0x18 << 16
-            0x00E0 | AC0M, 0x0100, // sr @0x100, $ac0.m
+            0x00E0 | AC0M,
+            0x0100, // sr @0x100, $ac0.m
             HALT,
         ];
         let mut d = core_with(&prog);
@@ -721,9 +729,10 @@ mod tests {
         let prog = [
             0x8100, // clr $ac0
             0x8900, // clr $ac1
-            0x110A, 0x0005, // bloopi #10, end=5
+            0x110A,
+            0x0005,         // bloopi #10, end=5
             0x7600 | 0x100, // 4: inc $ac1
-            0x4C00, // 5: add $ac0, $ac1
+            0x4C00,         // 5: add $ac0, $ac1
             HALT,
         ];
         let mut d = core_with(&prog);
@@ -737,12 +746,15 @@ mod tests {
     fn indirect_store_with_post_increment_and_conditional_jump() {
         // store 0..4 to dram[0x200..], loop with CMPI / JNZ
         let prog = [
-            0x0080 | AR0, 0x0200, // lri $ar0, #0x200
-            0x8100, // clr $ac0
+            0x0080 | AR0,
+            0x0200,        // lri $ar0, #0x200
+            0x8100,        // clr $ac0
             0x1B00 | AC0M, // 3: srri @$ar0, $ac0.m  (post-increment)
-            0x7400, // incm $ac0
-            0x0280, 0x0005, // cmpi $ac0, #5
-            0x0294, 0x0003, // jnz 3
+            0x7400,        // incm $ac0
+            0x0280,
+            0x0005, // cmpi $ac0, #5
+            0x0294,
+            0x0003, // jnz 3
             HALT,
         ];
         let mut d = core_with(&prog);
@@ -756,11 +768,15 @@ mod tests {
     fn mailbox_echo_and_dma() {
         // Wait for CPU mail, write it back + 1 into the DSP mailbox.
         let prog = [
-            0x00C0 | 0x1C, CMBH, // lr $ac0.l, @CMBH (pending flag)
-            0x00C0 | 0x1E, CMBL, // lr $ac0.m, @CMBL (acknowledges)
+            0x00C0 | 0x1C,
+            CMBH, // lr $ac0.l, @CMBH (pending flag)
+            0x00C0 | 0x1E,
+            CMBL,   // lr $ac0.m, @CMBL (acknowledges)
             0x0401, // addis $ac0, #1
-            0x00E0 | 0x1E, DMBH, // sr @DMBH, $ac0.m
-            0x00E0 | 0x1E, DMBL, // sr @DMBL, $ac0.m → mail valid
+            0x00E0 | 0x1E,
+            DMBH, // sr @DMBH, $ac0.m
+            0x00E0 | 0x1E,
+            DMBL, // sr @DMBL, $ac0.m → mail valid
             HALT,
         ];
         let mut d = core_with(&prog);

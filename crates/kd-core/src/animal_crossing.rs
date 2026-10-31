@@ -59,7 +59,12 @@ pub const TITLES: &[AcTitle] = &[
     AcTitle { system: System::Nds, code: "ADMK", title: "Animal Crossing: Wild World", region: Region::Korea },
     AcTitle { system: System::Wii, code: "RUUJ", title: "Machi e Ikō yo: Dōbutsu no Mori", region: Region::Japan },
     AcTitle { system: System::Wii, code: "RUUE", title: "Animal Crossing: City Folk", region: Region::NorthAmerica },
-    AcTitle { system: System::Wii, code: "RUUP", title: "Animal Crossing: Let's Go to the City", region: Region::Europe },
+    AcTitle {
+        system: System::Wii,
+        code: "RUUP",
+        title: "Animal Crossing: Let's Go to the City",
+        region: Region::Europe,
+    },
     AcTitle { system: System::Wii, code: "RUUK", title: "Animal Crossing: City Folk", region: Region::Korea },
 ];
 
