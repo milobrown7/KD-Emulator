@@ -1,0 +1,10 @@
+[package]
+name = "dsp-gc"
+description = "GameCube/Wii Macronix audio DSP: DSP interface, ARAM DMA, ADPCM, AX high-level emulation and a low-level DSP interpreter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kd-core.workspace = true
+tracing.workspace = true
