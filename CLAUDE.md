@@ -58,7 +58,8 @@ KD_KEYSTORE=release.jks KD_KEYSTORE_PASSWORD=… KD_KEY_ALIAS=… KD_KEY_PASSWOR
     ./gradlew assembleRelease
 ```
 
-Releases: pushing a `v*` tag runs `.github/workflows/release.yml`. It runs the host tests, builds and signs
+Releases: `.github/workflows/release.yml` runs on a `v*` tag push, or on a push that changes `RELEASE_NOTES.md`,
+the app version or the workflow, and only when release `v<versionName>` does not exist yet. It runs the host tests, builds and signs
 the APK, and publishes it with `RELEASE_NOTES.md` as the release text. Keep `versionCode`/`versionName` in
 `android/app/build.gradle.kts` in step with the tag.
 
