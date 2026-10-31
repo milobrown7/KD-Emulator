@@ -335,15 +335,14 @@ impl Arm {
         self.cpsr = (self.cpsr & !(FLAG_T | FLAG_I | FLAG_F | 0x1F)) | mode | if thumb { FLAG_T } else { 0 };
         self.halted = false;
         self.branch_to(bus, entry);
-        self.flushed = false;
     }
 
     /// Hardware reset: SVC mode, IRQ/FIQ masked, jump to the reset vector.
     pub fn reset<B: Bus>(&mut self, bus: &mut B) {
         let model = self.model;
         *self = Self::new(model);
-        self.branch_to(bus, bus.exception_base());
-        self.flushed = false;
+        let base = bus.exception_base();
+        self.branch_to(bus, base);
     }
 
     /// Enter an exception. `return_addr` is the value placed in the new

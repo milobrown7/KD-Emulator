@@ -3,6 +3,15 @@
 version = 3
 
 [[package]]
+name = "core-gba"
+version = "0.1.0"
+dependencies = [
+ "cpu-arm",
+ "kd-core",
+ "tracing",
+]
+
+[[package]]
 name = "cpu-arm"
 version = "0.1.0"
 dependencies = [

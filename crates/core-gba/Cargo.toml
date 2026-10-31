@@ -1,0 +1,11 @@
+[package]
+name = "core-gba"
+description = "Game Boy Advance core: bus, HLE BIOS, scanline PPU, PSG + DirectSound APU, DMA, timers, backup media, GPIO RTC/solar, tilt and JoyBus link"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kd-core.workspace = true
+cpu-arm.workspace = true
+tracing.workspace = true
