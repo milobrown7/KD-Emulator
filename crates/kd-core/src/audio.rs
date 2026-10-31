@@ -1,6 +1,6 @@
 //! Lock-free audio transport between the emulation thread and the AAudio
 //! callback thread, plus a streaming resampler from a core's native rate
-//! (GBA 32768 Hz, NDS 32768 Hz, GameCube/Wii 32000/48000 Hz) to the device rate.
+//! (GBA 32768 Hz, NDS 32728 Hz) to the device rate.
 
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicUsize, Ordering};

@@ -59,7 +59,7 @@ pub enum ThreadRole {
     EmuCpu,
     /// Vulkan command recording / submission worker.
     GpuWorker,
-    /// Audio mixing, GameCube/Wii DSP, NDS ARM7.
+    /// Audio mixing and other background work.
     AudioDsp,
 }
 

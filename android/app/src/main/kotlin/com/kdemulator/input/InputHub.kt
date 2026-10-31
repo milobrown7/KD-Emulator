@@ -23,7 +23,7 @@ object InputHub {
     @Volatile var touchX = -1
     @Volatile var touchY = -1
 
-    /** Wii Remote pointer in -1..1, valid while aiming. */
+    /** IR pointer (unused by GBA/DS; kept for the native input layout). */
     @Volatile var pointerX = 0f
     @Volatile var pointerY = 0f
     @Volatile var pointerValid = false

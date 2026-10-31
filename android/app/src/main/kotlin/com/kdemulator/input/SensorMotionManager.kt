@@ -10,8 +10,7 @@ import kotlin.math.sin
 
 /**
  * Motion and light sensors:
- * * `TYPE_GAME_ROTATION_VECTOR` → GBA tilt cartridges, Wii Remote
- *   accelerometer and (optionally) gyro aiming of the IR pointer.
+ * * `TYPE_GAME_ROTATION_VECTOR` → GBA tilt cartridges.
  * * `TYPE_LIGHT` → Boktai-style solar sensor.
  */
 class SensorMotionManager(context: Context) : SensorEventListener {
@@ -20,10 +19,6 @@ class SensorMotionManager(context: Context) : SensorEventListener {
     private val lightSensor = sensors.getDefaultSensor(Sensor.TYPE_LIGHT)
     private val matrix = FloatArray(9)
     private val orientation = FloatArray(3)
-    private var yawCentre: Float? = null
-
-    /** Aim the Wii pointer with the phone instead of touch. */
-    var gyroPointer = false
 
     fun start() {
         rotation?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
@@ -32,12 +27,6 @@ class SensorMotionManager(context: Context) : SensorEventListener {
 
     fun stop() {
         sensors.unregisterListener(this)
-        yawCentre = null
-    }
-
-    /** Re-centre the gyro pointer on the current heading. */
-    fun recentre() {
-        yawCentre = null
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -45,16 +34,10 @@ class SensorMotionManager(context: Context) : SensorEventListener {
             Sensor.TYPE_GAME_ROTATION_VECTOR -> {
                 SensorManager.getRotationMatrixFromVector(matrix, event.values)
                 SensorManager.getOrientation(matrix, orientation)
-                val (yaw, pitch, roll) = Triple(orientation[0], orientation[1], orientation[2])
+                val (pitch, roll) = orientation[1] to orientation[2]
                 // Tilt in g along the screen axes (landscape holding).
                 InputHub.tiltX = sin(roll)
                 InputHub.tiltY = sin(pitch)
-                if (gyroPointer) {
-                    val centre = yawCentre ?: yaw.also { yawCentre = it }
-                    InputHub.pointerX = ((yaw - centre) / 0.6f).coerceIn(-1f, 1f)
-                    InputHub.pointerY = (pitch / 0.45f).coerceIn(-1f, 1f)
-                    InputHub.pointerValid = true
-                }
                 InputHub.push()
             }
             Sensor.TYPE_LIGHT -> {

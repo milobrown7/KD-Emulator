@@ -120,11 +120,6 @@ class SkinInputState(private val actions: SkinActions, private val onPress: () -
                 InputHub.touchX = -1
                 InputHub.touchY = -1
             }
-            console == Console.WII -> {
-                InputHub.pointerX = touch.second.x * 2f - 1f
-                InputHub.pointerY = touch.second.y * 2f - 1f
-                InputHub.pointerValid = true
-            }
             else -> {
                 InputHub.touchX = (touch.second.x * 255f).toInt()
                 InputHub.touchY = (touch.second.y * 191f).toInt()
@@ -249,10 +244,8 @@ private fun DrawScope.drawProcedural(
     val edge = Color.White.copy(alpha = 0.55f * opacity)
     val ink = Color.White.copy(alpha = 0.9f * opacity.coerceAtLeast(0.35f))
     val accentA = when (console) {
-        Console.GAMECUBE -> Island.Leaf
         Console.NDS -> Island.Sky
         Console.GBA -> Island.Lagoon
-        Console.WII -> Color(0xFFE8EEF2)
     }
     for (item in rep.items) {
         val r = layout.toView(item.frame)
@@ -303,7 +296,6 @@ private fun DrawScope.drawProcedural(
                 val wide = sz.width > sz.height * 1.3f
                 val base = when {
                     name == "a" -> accentA.copy(alpha = 0.55f * opacity + 0.1f)
-                    name == "b" && console == Console.GAMECUBE -> Color(0xFFE0614F).copy(alpha = 0.55f * opacity + 0.1f)
                     else -> fill
                 }
                 val color = if (down) Island.Sand.copy(alpha = 0.7f) else base

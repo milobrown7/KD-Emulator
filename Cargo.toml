@@ -15,9 +15,6 @@ kd-core = { path = "crates/kd-core" }
 cpu-arm = { path = "crates/cpu-arm" }
 core-gba = { path = "crates/core-gba" }
 core-nds = { path = "crates/core-nds" }
-cpu-ppc = { path = "crates/cpu-ppc" }
-gpu-gx-vk = { path = "crates/gpu-gx-vk" }
-dsp-gc = { path = "crates/dsp-gc" }
 
 # Interpreters are unusably slow without optimisation, even in tests.
 [profile.dev]

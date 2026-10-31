@@ -6,7 +6,6 @@
 //! | CodeBreaker (unencrypted) | GBA | types 2, 3, 6, 7, 8, A, B, C, D, E |
 //! | GameShark / Action Replay v1–v2 | GBA | TEA decryption; types 0, 1, 2, D, E |
 //! | Action Replay DS | DS | all documented types (0–F, D0–DC) |
-//! | Gecko | GameCube, Wii | 00/02/04/06/08 writes, 20–2E conditionals, 42/4A, E0/E2 |
 //!
 //! Anything outside those tables is reported by [`Cheat::parse`] (when it
 //! can tell) or skipped with a `tracing::warn!` when applied.
@@ -32,25 +31,12 @@ pub fn write_le(m: &mut [u8], at: usize, value: u32, size: u8) {
     }
 }
 
-/// Big-endian read of `size` bytes at `at` (0 when out of range).
-pub fn read_be(m: &[u8], at: usize, size: u8) -> u32 {
-    m.get(at..at + size as usize).map_or(0, |b| b.iter().fold(0, |acc, &x| acc << 8 | x as u32))
-}
-
-/// Big-endian write (ignored when out of range).
-pub fn write_be(m: &mut [u8], at: usize, value: u32, size: u8) {
-    if let Some(b) = m.get_mut(at..at + size as usize) {
-        b.copy_from_slice(&value.to_be_bytes()[4 - size as usize..]);
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CheatFormat {
     Raw,
     CodeBreaker,
     GameShark,
     ActionReplayDs,
-    Gecko,
 }
 
 impl CheatFormat {
@@ -60,7 +46,6 @@ impl CheatFormat {
             Self::CodeBreaker => "codebreaker",
             Self::GameShark => "gameshark",
             Self::ActionReplayDs => "actionreplay",
-            Self::Gecko => "gecko",
         }
     }
 
@@ -70,7 +55,6 @@ impl CheatFormat {
             "codebreaker" => Self::CodeBreaker,
             "gameshark" => Self::GameShark,
             "actionreplay" => Self::ActionReplayDs,
-            "gecko" => Self::Gecko,
             _ => return None,
         })
     }
@@ -81,7 +65,6 @@ impl CheatFormat {
             Self::CodeBreaker => "CodeBreaker",
             Self::GameShark => "GameShark / Action Replay",
             Self::ActionReplayDs => "Action Replay",
-            Self::Gecko => "Gecko",
         }
     }
 
@@ -90,7 +73,6 @@ impl CheatFormat {
         match system {
             System::Gba => &[Self::GameShark, Self::CodeBreaker, Self::Raw],
             System::Nds => &[Self::ActionReplayDs, Self::Raw],
-            System::GameCube | System::Wii => &[Self::Gecko],
         }
     }
 }
@@ -196,7 +178,6 @@ impl Cheat {
             CheatFormat::CodeBreaker => self.apply_codebreaker(mem),
             CheatFormat::GameShark => self.apply_gameshark(mem),
             CheatFormat::ActionReplayDs => self.apply_ards(mem),
-            CheatFormat::Gecko => self.apply_gecko(mem),
         }
     }
 
@@ -402,122 +383,6 @@ impl Cheat {
             }
         }
     }
-
-    fn apply_gecko(&self, mem: &mut dyn CheatMemory) {
-        let mut ba = 0x8000_0000u32;
-        let mut po = 0x8000_0000u32;
-        let mut skip = 0u32;
-        let mut i = 0;
-        let n = self.lines.len();
-        while i < n {
-            let Line { a, b, .. } = self.lines[i];
-            i += 1;
-            let ty = (a >> 24) & 0xEE; // drop the pointer bit (0x10) and the endif bit
-            let base = if a & 0x1000_0000 != 0 { po } else { ba };
-            let addr = base.wrapping_add(a & 0x01FF_FFFF);
-            if skip > 0 {
-                match a >> 24 {
-                    0x20..=0x3F if a & 1 != 0 && skip == 1 => skip = 0, // endif closes the failed block; evaluate
-                    0x20..=0x3F if a & 1 == 0 => {
-                        skip += 1;
-                        continue;
-                    }
-                    0xE2 => {
-                        skip = skip.saturating_sub((a & 0xFF).max(1));
-                        continue;
-                    }
-                    0xE0 => skip = 0,
-                    0x06 | 0x16 => {
-                        i += (b as usize).div_ceil(8);
-                        continue;
-                    }
-                    0x08 | 0x18 => {
-                        i += 1;
-                        continue;
-                    }
-                    _ => continue,
-                }
-            }
-            match ty {
-                0x00 => {
-                    let count = (b >> 16) + 1;
-                    for k in 0..count {
-                        mem.write(addr.wrapping_add(k), b & 0xFF, 1);
-                    }
-                }
-                0x02 => {
-                    let count = (b >> 16) + 1;
-                    for k in 0..count {
-                        mem.write(addr.wrapping_add(k * 2), b & 0xFFFF, 2);
-                    }
-                }
-                0x04 => mem.write(addr & !3, b, 4),
-                0x06 => {
-                    let words = (b as usize).div_ceil(8);
-                    let mut bytes = Vec::with_capacity(words * 8);
-                    for l in self.lines.iter().skip(i).take(words) {
-                        bytes.extend_from_slice(&l.a.to_be_bytes());
-                        bytes.extend_from_slice(&l.b.to_be_bytes());
-                    }
-                    for (k, &byte) in bytes.iter().take(b as usize).enumerate() {
-                        mem.write(addr.wrapping_add(k as u32), byte as u32, 1);
-                    }
-                    i += words;
-                }
-                0x08 => {
-                    // 08XXXXXX YYYYYYYY / TNNNZZZZ VVVVVVVV: serial write.
-                    let Some(next) = self.lines.get(i) else { break };
-                    i += 1;
-                    let size = [1u8, 2, 4][((next.a >> 28) & 3).min(2) as usize];
-                    let count = ((next.a >> 16) & 0xFFF) + 1;
-                    let step = next.a & 0xFFFF;
-                    let (mut at, mut v) = (addr, b);
-                    for _ in 0..count {
-                        mem.write(at, v, size);
-                        at = at.wrapping_add(step);
-                        v = v.wrapping_add(next.b);
-                    }
-                }
-                0x20 | 0x22 | 0x24 | 0x26 | 0x28 | 0x2A | 0x2C | 0x2E => {
-                    // (A set lowest address bit means "endif, then if"; with
-                    // nothing skipped there is no open block to close.)
-                    let a2 = addr & !1;
-                    let ok = if ty < 0x28 {
-                        let v = mem.read(a2 & !3, 4);
-                        match ty {
-                            0x20 => v == b,
-                            0x22 => v != b,
-                            0x24 => v > b,
-                            _ => v < b,
-                        }
-                    } else {
-                        let v = mem.read(a2 & !1, 2) & !(b >> 16) & 0xFFFF;
-                        let y = b & 0xFFFF;
-                        match ty {
-                            0x28 => v == y,
-                            0x2A => v != y,
-                            0x2C => v > y,
-                            _ => v < y,
-                        }
-                    };
-                    if !ok {
-                        skip = 1;
-                    }
-                }
-                0x42 if a >> 24 == 0x42 => ba = b,
-                0x4A if a >> 24 == 0x4A => po = b,
-                0xE0 | 0xE2 if a >> 24 == ty => {
-                    if b >> 16 != 0 {
-                        ba = b & 0xFFFF_0000;
-                    }
-                    if b & 0xFFFF != 0 {
-                        po = (b & 0xFFFF) << 16;
-                    }
-                }
-                _ => tracing::warn!("Gecko code type {:02X} is not supported", a >> 24),
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -535,20 +400,6 @@ mod tests {
         fn write(&mut self, addr: u32, value: u32, size: u8) {
             for k in 0..size as u32 {
                 self.0.insert(addr + k, (value >> (8 * k)) as u8);
-            }
-        }
-    }
-
-    #[derive(Default)]
-    struct Be(HashMap<u32, u8>);
-
-    impl CheatMemory for Be {
-        fn read(&mut self, addr: u32, size: u8) -> u32 {
-            (0..size as u32).fold(0, |acc, k| acc << 8 | *self.0.get(&(addr + k)).unwrap_or(&0) as u32)
-        }
-        fn write(&mut self, addr: u32, value: u32, size: u8) {
-            for k in 0..size as u32 {
-                self.0.insert(addr + k, (value >> (8 * (size as u32 - 1 - k))) as u8);
             }
         }
     }
@@ -633,36 +484,8 @@ mod tests {
     }
 
     #[test]
-    fn gecko_writes_and_conditionals_big_endian() {
-        let text = "\
-            04001000 12345678\n\
-            02001010 0001ABCD\n\
-            00001020 000200EE\n\
-            20001000 12345678\n\
-            04001030 00000001\n\
-            E2000001 00000000\n\
-            20001000 00000000\n\
-            04001034 00000001\n\
-            E0000000 80008000";
-        let c = Cheat::parse(CheatFormat::Gecko, text).unwrap();
-        let mut m = Be::default();
-        c.apply(&mut m);
-        assert_eq!(m.read(0x8000_1000, 4), 0x1234_5678);
-        assert_eq!(m.read(0x8000_1010, 4), 0xABCD_ABCD, "16-bit write repeated twice");
-        assert_eq!(m.read(0x8000_1020, 3), 0xEEEEEE, "8-bit write repeated 3 times");
-        assert_eq!(m.read(0x8000_1030, 4), 1, "true conditional");
-        assert_eq!(m.read(0x8000_1034, 4), 0, "false conditional skipped");
-    }
-
-    #[test]
     fn formats_round_trip_ids() {
-        for f in [
-            CheatFormat::Raw,
-            CheatFormat::CodeBreaker,
-            CheatFormat::GameShark,
-            CheatFormat::ActionReplayDs,
-            CheatFormat::Gecko,
-        ] {
+        for f in [CheatFormat::Raw, CheatFormat::CodeBreaker, CheatFormat::GameShark, CheatFormat::ActionReplayDs] {
             assert_eq!(CheatFormat::from_id(f.id()), Some(f));
         }
         assert_eq!(CheatFormat::for_system(System::Nds)[0], CheatFormat::ActionReplayDs);

@@ -163,7 +163,6 @@ fun GameScreen(services: AppServices, game: Game, resume: Boolean, onExit: () ->
             services.states.latest(game.id, SaveStateKind.AUTO)?.let { if (services.states.load(it)) toast = "Resumed where you left off" }
         }
         acTitle = NativeEmulatorBridge.parseInfo(NativeEmulatorBridge.nativeGetAnimalCrossingInfo())["title"]
-        sensors.gyroPointer = settings.gyroPointer
         sensors.start()
         NativeEmulatorBridge.nativeStart()
         thermal.start(if (game.console == Console.GBA) 59.73 else 59.94)

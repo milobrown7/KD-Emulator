@@ -15,8 +15,7 @@ import java.util.zip.ZipInputStream
 /**
  * Controller skins: the built-in Island skin for every console plus skins
  * the player imports. `.deltaskin` files (Delta's format: a zip with
- * `info.json` and PDF/PNG artwork) work for GBA and DS; `.kdskin` uses the
- * same format with KD-Emulator game types for GameCube and Wii.
+ * `info.json` and PDF/PNG artwork) work for GBA and DS.
  */
 class SkinRepository(private val context: Context) {
     private val root = File(context.filesDir, "skins")

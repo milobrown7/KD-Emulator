@@ -1,6 +1,6 @@
 [package]
 name = "android-jni"
-description = "KD-Emulator native library for Android: JNI bridge, emulation thread, ANativeWindow presentation, AAudio output, SAF file-descriptor loading and Tensor thermal/affinity integration"
+description = "KD-Emulator native library for Android: JNI bridge, emulation thread, frame hand-off, AAudio output, SAF file-descriptor loading and Tensor thermal/affinity integration"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,9 +13,6 @@ crate-type = ["cdylib", "rlib"]
 kd-core.workspace = true
 core-gba.workspace = true
 core-nds.workspace = true
-core-gcn = { path = "../core-gcn" }
-core-wii = { path = "../core-wii" }
-gpu-gx-vk.workspace = true
 libc.workspace = true
 tracing.workspace = true
 jni = { version = "0.21", default-features = false }

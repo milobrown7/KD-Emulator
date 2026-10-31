@@ -34,7 +34,7 @@ sealed interface SkinInputs {
     /** Analog stick: the touch that starts on it drags the stick. */
     data class Thumbstick(val up: String, val down: String, val left: String, val right: String, val image: String?) : SkinInputs
 
-    /** DS touchscreen or Wii pointer area. */
+    /** DS touchscreen area. */
     data object Touchscreen : SkinInputs
 }
 
@@ -137,7 +137,7 @@ fun dpadDirections(d: SkinInputs.DPad, p: PointF, deadZone: Float = 0.3f): List<
     return out
 }
 
-/** A controller skin: built-in or imported (`.deltaskin` / `.kdskin`). */
+/** A controller skin: built-in or imported (`.deltaskin`). */
 data class ControllerSkin(
     val id: String,
     val name: String,
@@ -154,12 +154,10 @@ data class ControllerSkin(
         }
 
     companion object {
-        /** Delta game type identifiers, plus KD-Emulator's own for GameCube and Wii. */
+        /** Delta game type identifiers (plus KD-Emulator's own aliases). */
         fun consoleForGameType(id: String): Console? = when (id) {
             "com.rileytestut.delta.game.gba", "com.kdemulator.game.gba" -> Console.GBA
             "com.rileytestut.delta.game.ds", "com.kdemulator.game.ds" -> Console.NDS
-            "com.kdemulator.game.gamecube" -> Console.GAMECUBE
-            "com.kdemulator.game.wii" -> Console.WII
             else -> null
         }
 

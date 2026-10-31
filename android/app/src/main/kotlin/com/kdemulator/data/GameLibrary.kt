@@ -1,7 +1,6 @@
 package com.kdemulator.data
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -26,17 +25,15 @@ data class Game(
     val console: Console,
     val code: String,
     val fileName: String,
-    /** Copied into app storage (cartridges) — null for referenced discs. */
-    val localPath: String?,
-    /** Persisted SAF document for large discs that stay where they are. */
-    val documentUri: String?,
+    /** The cartridge, copied into app storage. */
+    val localPath: String,
     val animalCrossing: Boolean,
     val addedAt: Long,
     val lastPlayedAt: Long = 0,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("title", title).put("console", console.id).put("code", code)
-        .put("fileName", fileName).put("localPath", localPath).put("documentUri", documentUri)
+        .put("fileName", fileName).put("localPath", localPath)
         .put("ac", animalCrossing).put("addedAt", addedAt).put("lastPlayedAt", lastPlayedAt)
 
     companion object {
@@ -48,8 +45,7 @@ data class Game(
                 console = console,
                 code = o.optString("code"),
                 fileName = o.optString("fileName"),
-                localPath = o.optString("localPath").takeIf { it.isNotEmpty() && it != "null" },
-                documentUri = o.optString("documentUri").takeIf { it.isNotEmpty() && it != "null" },
+                localPath = o.optString("localPath").takeIf { it.isNotEmpty() && it != "null" } ?: return null,
                 animalCrossing = o.optBoolean("ac"),
                 addedAt = o.optLong("addedAt"),
                 lastPlayedAt = o.optLong("lastPlayedAt"),
@@ -67,10 +63,8 @@ sealed interface ImportResult {
 
 /**
  * The game library, Delta style: imported cartridges are copied into app
- * storage (zips are unpacked), disc images bigger than [COPY_LIMIT] are
- * referenced in place through a persisted document permission. Metadata
- * and artwork come from the game itself (DS icon, GameCube banner) unless
- * the player picks their own.
+ * storage (zips are unpacked). Metadata and artwork come from the game
+ * itself (the DS banner icon) unless the player picks their own.
  */
 class GameLibrary(private val context: Context) {
     private val root = context.filesDir
@@ -108,11 +102,6 @@ class GameLibrary(private val context: Context) {
             if (c.moveToFirst()) c.getString(0) else null
         } ?: uri.lastPathSegment?.substringAfterLast('/') ?: "game"
 
-    private fun size(uri: Uri): Long =
-        context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
-            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else -1L
-        } ?: -1L
-
     /** Import files picked by the player (runs on a background thread). */
     fun import(uris: List<Uri>): List<ImportResult> = uris.flatMap { importOne(it) }
 
@@ -122,7 +111,6 @@ class GameLibrary(private val context: Context) {
         return try {
             when {
                 ext == "zip" -> importZip(uri, name)
-                ext in DISC_EXTENSIONS && size(uri) > COPY_LIMIT -> listOf(addReferenced(uri, name))
                 ext in EXTENSIONS -> {
                     val tmp = File(context.cacheDir, "import-${UUID.randomUUID()}").apply { parentFile?.mkdirs() }
                     context.contentResolver.openInputStream(uri)?.use { input -> tmp.outputStream().use { input.copyTo(it) } }
@@ -159,7 +147,7 @@ class GameLibrary(private val context: Context) {
         val info = ParcelFileDescriptor.open(tmp, ParcelFileDescriptor.MODE_READ_ONLY).use { identify(it, name) }
         if (info == null) {
             tmp.delete()
-            return ImportResult.Failed(name, "not recognised as a GBA, DS, GameCube or Wii game")
+            return ImportResult.Failed(name, "not recognised as a GBA or DS game")
         }
         duplicateOf(info, tmp.length())?.let {
             tmp.delete()
@@ -171,19 +159,7 @@ class GameLibrary(private val context: Context) {
             tmp.copyTo(dest, overwrite = true)
             tmp.delete()
         }
-        val game = info.toGame(id, name, localPath = dest.absolutePath, documentUri = null)
-        info.icon?.let { saveArtwork(id, it) }
-        persist(_games.value + game)
-        return ImportResult.Added(game)
-    }
-
-    private fun addReferenced(uri: Uri, name: String): ImportResult {
-        runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-        val info = context.contentResolver.openFileDescriptor(uri, "r")?.use { identify(it, name) }
-            ?: return ImportResult.Failed(name, "not recognised as a GameCube or Wii disc")
-        duplicateOf(info, size(uri))?.let { return ImportResult.Duplicate(it) }
-        val id = UUID.randomUUID().toString()
-        val game = info.toGame(id, name, localPath = null, documentUri = uri.toString())
+        val game = info.toGame(id, name, localPath = dest.absolutePath)
         info.icon?.let { saveArtwork(id, it) }
         persist(_games.value + game)
         return ImportResult.Added(game)
@@ -191,13 +167,13 @@ class GameLibrary(private val context: Context) {
 
     private fun duplicateOf(info: Info, size: Long): Game? = _games.value.firstOrNull { g ->
         g.code == info.code && g.console == info.console && g.code.isNotBlank() &&
-            (g.localPath?.let { File(it).length() == size } ?: true)
+            File(g.localPath).length() == size
     }
 
     private data class Info(val console: Console, val code: String, val title: String, val ac: Boolean, val icon: Bitmap?) {
-        fun toGame(id: String, fileName: String, localPath: String?, documentUri: String?) = Game(
+        fun toGame(id: String, fileName: String, localPath: String) = Game(
             id, title.ifBlank { fileName.substringBeforeLast('.') }, console, code, fileName,
-            localPath, documentUri, ac, System.currentTimeMillis(),
+            localPath, ac, System.currentTimeMillis(),
         )
     }
 
@@ -224,9 +200,6 @@ class GameLibrary(private val context: Context) {
         backupFile(g).delete()
         File(root, "states/$id").deleteRecursively()
         File(root, "cheats/$id.json").delete()
-        g.documentUri?.let { u ->
-            runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(u), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-        }
         persist(_games.value.filterNot { it.id == id })
     }
 
@@ -254,12 +227,8 @@ class GameLibrary(private val context: Context) {
     // ------------------------------------------------------------ running
 
     /** Open a descriptor for the game file. */
-    fun open(game: Game): ParcelFileDescriptor? = when {
-        game.localPath != null -> File(game.localPath).takeIf { it.exists() }
-            ?.let { ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY) }
-        game.documentUri != null -> runCatching { context.contentResolver.openFileDescriptor(Uri.parse(game.documentUri), "r") }.getOrNull()
-        else -> null
-    }
+    fun open(game: Game): ParcelFileDescriptor? =
+        File(game.localPath).takeIf { it.exists() }?.let { ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY) }
 
     /** Boot the game in native code and restore its battery save and clock. */
     fun boot(game: Game): Boolean {
@@ -306,9 +275,6 @@ class GameLibrary(private val context: Context) {
     }
 
     companion object {
-        val EXTENSIONS = setOf("gba", "agb", "mb", "nds", "srl", "iso", "gcm", "dol", "wbfs")
-        val DISC_EXTENSIONS = setOf("iso", "gcm", "wbfs")
-        /** Discs larger than this are referenced instead of copied. */
-        const val COPY_LIMIT = 256L shl 20
+        val EXTENSIONS = setOf("gba", "agb", "mb", "nds", "srl")
     }
 }

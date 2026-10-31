@@ -13,14 +13,12 @@ enum class CheatFormat(val id: String, val label: String, val example: String) {
     GAMESHARK("gameshark", "GameShark", "XXXXXXXX YYYYYYYY"),
     CODEBREAKER("codebreaker", "CodeBreaker", "XXXXXXXX YYYY"),
     RAW("raw", "Raw", "02000000:FF"),
-    ACTION_REPLAY("actionreplay", "Action Replay", "XXXXXXXX YYYYYYYY"),
-    GECKO("gecko", "Gecko", "XXXXXXXX YYYYYYYY");
+    ACTION_REPLAY("actionreplay", "Action Replay", "XXXXXXXX YYYYYYYY");
 
     companion object {
         fun forConsole(c: Console): List<CheatFormat> = when (c) {
             Console.GBA -> listOf(GAMESHARK, CODEBREAKER, RAW)
             Console.NDS -> listOf(ACTION_REPLAY, RAW)
-            Console.GAMECUBE, Console.WII -> listOf(GECKO)
         }
 
         fun fromId(id: String) = entries.firstOrNull { it.id == id }

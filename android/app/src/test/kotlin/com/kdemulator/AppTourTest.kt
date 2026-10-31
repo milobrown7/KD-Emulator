@@ -100,22 +100,18 @@ class AppTourTest {
             write("KD Testcart.gba", Fixtures.gbaGradientRom()),
             write("Island Days.nds", Fixtures.dsRom("ISLANDDAYS", "KDID", "Island Days\nKD Homebrew", Fixtures.leafIcon())),
             write("wild_world.nds", Fixtures.dsRom("WILDWORLD", "ADME", "Animal Crossing\nWild World\nNintendo", Fixtures.houseIcon())),
-            write("ac.iso", Fixtures.gcDisc("GAFE01", "Animal Crossing")),
         ).map { services.library.importFile(it) }
         imports.forEach { assertTrue("import $it", it is ImportResult.Added) }
         assertTrue("re-import is a duplicate", services.library.importFile(write("again.gba", Fixtures.gbaGradientRom())) is ImportResult.Duplicate)
         val games = services.library.games.value
-        assertEquals(setOf(Console.GBA, Console.NDS, Console.GAMECUBE), games.map { it.console }.toSet())
+        assertEquals(setOf(Console.GBA, Console.NDS), games.map { it.console }.toSet())
         val ww = games.first { it.code == "ADME" }
         assertTrue("Wild World recognised", ww.animalCrossing)
         assertNotNull("DS icon extracted", services.library.artwork(ww.id))
-        assertNotNull("GameCube banner extracted", services.library.artwork(games.first { it.console == Console.GAMECUBE }.id))
+        assertTrue("disc images are rejected", services.library.importFile(write("disc.iso", ByteArray(0x8000))) is ImportResult.Failed)
         shot("02_library_gba")
         compose.onRoot().performTouchInput { swipeLeft() }
         shot("03_library_ds")
-        compose.onRoot().performTouchInput { swipeLeft() }
-        shot("04_library_gamecube")
-        compose.onRoot().performTouchInput { swipeRight() }
         compose.onRoot().performTouchInput { swipeRight() }
         compose.waitForIdle()
 
@@ -187,7 +183,6 @@ class AppTourTest {
 object Fixtures {
     private fun put32le(b: ByteArray, at: Int, v: Long) { for (i in 0..3) b[at + i] = (v shr (8 * i)).toByte() }
     private fun put16le(b: ByteArray, at: Int, v: Int) { b[at] = v.toByte(); b[at + 1] = (v shr 8).toByte() }
-    private fun put32be(b: ByteArray, at: Int, v: Long) { for (i in 0..3) b[at + i] = (v shr (8 * (3 - i))).toByte() }
     private fun ascii(b: ByteArray, at: Int, s: String) = s.toByteArray(Charsets.US_ASCII).copyInto(b, at)
 
     /** GBA cartridge whose code switches to mode 3 and paints a colour ramp. */
@@ -259,38 +254,5 @@ object Fixtures {
         PALETTE.forEachIndexed { i, c -> put16le(rom, b + 0x220 + i * 2, c) }
         bannerTitle.toCharArray().forEachIndexed { i, ch -> put16le(rom, b + 0x340 + i * 2, ch.code) }
         return rom
-    }
-
-    /** Tiny GameCube disc: header, FST and an opening.bnr with a sunset banner. */
-    fun gcDisc(id: String, title: String): ByteArray {
-        val d = ByteArray(0x10000)
-        ascii(d, 0, id)
-        put32be(d, 0x1C, 0xC2339F3D)
-        ascii(d, 0x20, title)
-        val fst = 0x2000
-        val names = "opening.bnr\u0000".toByteArray()
-        put32be(d, 0x424, fst.toLong())
-        put32be(d, 0x428, (24 + names.size).toLong())
-        d[fst] = 1
-        put32be(d, fst + 8, 2)
-        put32be(d, fst + 16, 0x4000)
-        put32be(d, fst + 20, 0x1960)
-        names.copyInto(d, fst + 24)
-        val bnr = 0x4000
-        ascii(d, bnr, "BNR1")
-        for (y in 0 until 32) for (x in 0 until 96) {
-            val sun = (x - 70) * (x - 70) + (y - 14) * (y - 14) < 60
-            val r = if (sun) 31 else 8 + y / 2
-            val g = if (sun) 26 else 12 + y / 4
-            val bl = if (sun) 8 else 24 - y / 3
-            val texel = 0x8000 or (r shl 10) or (g shl 5) or bl
-            val block = (y / 4) * 24 + x / 4
-            val at = bnr + 0x20 + (block * 16 + (y % 4) * 4 + x % 4) * 2
-            d[at] = (texel shr 8).toByte()
-            d[at + 1] = texel.toByte()
-        }
-        ascii(d, bnr + 0x1820, title)
-        ascii(d, bnr + 0x1860, title)
-        return d
     }
 }

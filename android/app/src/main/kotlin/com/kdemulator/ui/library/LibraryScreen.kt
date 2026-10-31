@@ -81,16 +81,12 @@ import kotlinx.coroutines.withContext
 fun consoleAccent(console: Console): Color = when (console) {
     Console.GBA -> Island.Lagoon
     Console.NDS -> Island.Sky
-    Console.GAMECUBE -> Island.Leaf
-    Console.WII -> Island.Sunset
 }
 
 /** What the Animal Crossing profile turns on, per console (mirrors kd-core). */
 fun animalCrossingBlurb(console: Console): String = when (console) {
-    Console.GBA -> "Link-cable companion for the GameCube game"
+    Console.GBA -> "Link-cable multiboot mode"
     Console.NDS -> "Stylus-first controls and a time-travel clock"
-    Console.GAMECUBE -> "Memory Card 251, GBA link and a time-travel clock"
-    Console.WII -> "Pointer controls, SD card and a time-travel clock"
 }
 
 /** Ways to start a game from the library. */
@@ -196,7 +192,7 @@ fun LibraryScreen(
                         val list = games.filter { it.console == console }
                             .sortedWith(compareByDescending<Game> { it.animalCrossing }.thenBy { it.title.lowercase() })
                         LazyVerticalGrid(
-                            columns = GridCells.Adaptive(if (console == Console.GAMECUBE || console == Console.WII) 150.dp else 104.dp),
+                            columns = GridCells.Adaptive(104.dp),
                             contentPadding = PaddingValues(16.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -295,7 +291,7 @@ private fun EmptyLibrary(deviceSummary: String, onImport: () -> Unit) {
         Text("No Games", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Import your own game files: .gba, .nds, .iso/.gcm, .wbfs, .dol or a .zip. No BIOS or firmware is needed.",
+            "Import your own game files: .gba, .nds or a .zip. No BIOS or firmware is needed.",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
@@ -311,10 +307,9 @@ private fun EmptyLibrary(deviceSummary: String, onImport: () -> Unit) {
 @Composable
 fun GameTile(services: AppServices, game: Game, artVersion: Int, modifier: Modifier = Modifier) {
     val art = remember(game.id, artVersion) { services.library.artwork(game.id)?.asImageBitmap() }
-    val wide = game.console == Console.GAMECUBE || game.console == Console.WII
     Column(modifier) {
         Box(
-            Modifier.fillMaxWidth().aspectRatio(if (wide) 1.5f else 1f).clip(RoundedCornerShape(16.dp))
+            Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(16.dp))
                 .background(Brush.linearGradient(listOf(consoleAccent(game.console), consoleAccent(game.console).copy(alpha = 0.55f), Island.Night))),
             contentAlignment = Alignment.Center,
         ) {

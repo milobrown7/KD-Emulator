@@ -42,9 +42,7 @@ object NativeEmulatorBridge {
     /** `kd_core::System` discriminants. */
     enum class Console(val id: Int, val label: String, val shortLabel: String, val screenWidth: Int, val screenHeight: Int) {
         GBA(1, "Game Boy Advance", "GBA", 240, 160),
-        NDS(2, "Nintendo DS", "DS", 256, 384),
-        GAMECUBE(3, "GameCube", "GC", 640, 480),
-        WII(4, "Wii", "Wii", 640, 480);
+        NDS(2, "Nintendo DS", "DS", 256, 384);
 
         companion object {
             fun fromId(id: Int): Console? = entries.firstOrNull { it.id == id }

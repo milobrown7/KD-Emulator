@@ -151,10 +151,9 @@ fun SettingsScreen(services: AppServices, deviceSummary: String, onSkins: (Conso
                     }
                 }
                 item {
-                    Section("Audio & Motion")
+                    Section("Audio")
                     SliderRow("Game volume", s.volume, 0f..1f, "${(s.volume * 100).toInt()}%") { v -> services.settings.update { it.copy(volume = v) } }
                     SwitchRow("DS microphone", "Use the phone's microphone for blowing and voice", s.microphone) { v -> services.settings.update { it.copy(microphone = v) } }
-                    SwitchRow("Aim the Wii pointer by tilting", "Uses the gyroscope instead of touch", s.gyroPointer) { v -> services.settings.update { it.copy(gyroPointer = v) } }
                 }
                 item {
                     Section("About")
@@ -162,7 +161,7 @@ fun SettingsScreen(services: AppServices, deviceSummary: String, onSkins: (Conso
                         Text("KD-Emulator 0.2", style = MaterialTheme.typography.titleMedium)
                         Text(deviceSummary, style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "Game Boy Advance, Nintendo DS and GameCube games run without BIOS or firmware files. Animal Crossing games get their own profile on every console (🍃).",
+                            "Game Boy Advance and Nintendo DS games run without BIOS or firmware files. Animal Crossing games get their own profile on every console (🍃).",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Text(
@@ -226,7 +225,7 @@ fun SkinPickerScreen(services: AppServices, console: Console, onBack: () -> Unit
                 }
             }
             OutlinedButton(onClick = { importer.launch(arrayOf("*/*")) }, modifier = Modifier.padding(20.dp).fillMaxWidth()) {
-                Text(if (console == Console.GBA || console == Console.NDS) "Import a .deltaskin" else "Import a .kdskin")
+                Text("Import a .deltaskin")
             }
         }
     }

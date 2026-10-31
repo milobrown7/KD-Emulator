@@ -4,13 +4,11 @@
 //! Animal Crossing time-travel controls. Everything here runs (and is
 //! tested) on the host; the Android glue lives in `android.rs`.
 
-use core_gcn::disc::{Disc, DiscHeader, IsoDisc, GC_MAGIC, WII_MAGIC};
-use core_wii::containers::WbfsDisc;
 use kd_core::animal_crossing::{self, ControlLayout};
 use kd_core::audio::{audio_ring, AudioConsumer, AudioProducer, Resampler};
 use kd_core::cheats::{Cheat, CheatFormat};
 use kd_core::rewind::RewindBuffer;
-use kd_core::thermal::{GpuVendorProfile, ThermalPolicy, ThermalStatus, UserGraphicsPrefs};
+use kd_core::thermal::{ThermalPolicy, ThermalStatus};
 use kd_core::topology::{CpuFeatures, CpuTopology};
 use kd_core::{CoreMemory, EmulatorCore, InputState, StereoFrame, System};
 use std::time::Duration;
@@ -29,73 +27,32 @@ pub const CHEAT_FIELD_SEP: char = '\u{1F}';
 pub fn detect_system(name: &str, data: &[u8]) -> Option<System> {
     let lower = name.to_ascii_lowercase();
     let ext = lower.rsplit('.').next().unwrap_or("");
-    let be32 = |at: usize| data.get(at..at + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]));
     match ext {
         "gba" | "agb" | "mb" => Some(System::Gba),
         "nds" | "srl" => Some(System::Nds),
-        "wbfs" | "wad" => Some(System::Wii),
-        "iso" | "gcm" => {
-            if be32(0x18) == Some(WII_MAGIC) {
-                Some(System::Wii)
-            } else if be32(0x1C) == Some(GC_MAGIC) {
-                Some(System::GameCube)
-            } else {
-                None
-            }
-        }
-        "dol" | "elf" => Some(System::GameCube),
-        _ => {
-            // Header sniffing for files without a useful extension.
-            if data.get(0xB2) == Some(&0x96) && data.len() >= 0xC0 {
-                Some(System::Gba)
-            } else if be32(0x1C) == Some(GC_MAGIC) {
-                Some(System::GameCube)
-            } else if be32(0x18) == Some(WII_MAGIC) {
-                Some(System::Wii)
-            } else {
-                None
-            }
-        }
+        // Header sniffing for files without a useful extension: the GBA
+        // header's fixed 0x96 byte.
+        _ if data.get(0xB2) == Some(&0x96) && data.len() >= 0xC0 => Some(System::Gba),
+        _ => None,
     }
 }
 
 /// Instantiate the right core for a loaded file.
 pub fn create_core(name: &str, data: Vec<u8>) -> Result<Box<dyn EmulatorCore>, String> {
     let system = detect_system(name, &data).ok_or_else(|| format!("unrecognised file: {name}"))?;
-    let lower = name.to_ascii_lowercase();
     Ok(match system {
         System::Gba => {
-            if lower.ends_with(".mb") {
+            if name.to_ascii_lowercase().ends_with(".mb") {
                 Box::new(core_gba::Gba::new_multiboot(&data))
             } else {
                 Box::new(core_gba::Gba::new(data))
             }
         }
         System::Nds => Box::new(core_nds::Nds::new(data).map_err(|e| e.to_string())?),
-        System::GameCube => {
-            if lower.ends_with(".dol") {
-                Box::new(core_gcn::GameCube::from_dol(&data).map_err(|e| e.to_string())?)
-            } else {
-                Box::new(core_gcn::GameCube::from_disc(data).map_err(|e| e.to_string())?)
-            }
-        }
-        System::Wii => {
-            if lower.ends_with(".wad") {
-                return Err("WAD titles must be installed to the virtual NAND first (needs your console keys)".into());
-            }
-            let mut wii = core_wii::Wii::new_machine().map_err(|e| e.to_string())?;
-            let disc: Box<dyn Disc> = if lower.ends_with(".wbfs") {
-                Box::new(WbfsDisc::new(data).map_err(|e| e.to_string())?)
-            } else {
-                Box::new(IsoDisc::new(data))
-            };
-            wii.insert_disc(disc).map_err(|e| e.to_string())?;
-            Box::new(wii)
-        }
     })
 }
 
-/// Read a disc/ROM header without booting.
+/// Read a ROM header without booting.
 pub fn peek_title(name: &str, data: &[u8]) -> Option<(System, String, String)> {
     let mut read = |off: u64, buf: &mut [u8]| {
         let o = off as usize;
@@ -116,14 +73,14 @@ pub struct GameInfo {
     pub system: System,
     pub code: String,
     pub title: String,
-    /// Artwork from the game itself (DS icon, GameCube banner) in RGBA8888.
+    /// Artwork from the game itself (the DS banner icon) in RGBA8888.
     pub icon: Option<(u32, u32, Vec<u32>)>,
     pub animal_crossing: bool,
 }
 
 /// Read metadata with random access (`read` fills a buffer from a file
 /// offset and returns false past the end), so only the header and banner
-/// are touched even for multi-gigabyte discs.
+/// are touched.
 pub fn game_info(name: &str, read: &mut dyn FnMut(u64, &mut [u8]) -> bool) -> Option<GameInfo> {
     let mut head = vec![0u8; 0x440];
     if !read(0, &mut head) {
@@ -137,9 +94,7 @@ pub fn game_info(name: &str, read: &mut dyn FnMut(u64, &mut [u8]) -> bool) -> Op
             }
         }
     }
-    let lower = name.to_ascii_lowercase();
-    let wbfs = head.starts_with(b"WBFS");
-    let system = if wbfs { System::Wii } else { detect_system(name, &head)? };
+    let system = detect_system(name, &head)?;
     let mut icon = None;
     let (code, mut title) = match system {
         System::Gba => {
@@ -163,38 +118,6 @@ pub fn game_info(name: &str, read: &mut dyn FnMut(u64, &mut [u8]) -> bool) -> Op
             }
             (String::from_utf8_lossy(&h.game_code).into_owned(), title)
         }
-        _ if lower.ends_with(".dol") || lower.ends_with(".elf") => {
-            let stem = name.rsplit('/').next().unwrap_or(name);
-            ("DOL".to_string(), stem.rsplit_once('.').map_or(stem, |(s, _)| s).to_string())
-        }
-        _ => {
-            // WBFS keeps a copy of the disc header at the start of its
-            // second hard-disk sector.
-            let disc_head = if wbfs {
-                let shift = head.get(8).copied().unwrap_or(9).clamp(9, 20);
-                let mut d = vec![0u8; 0x100];
-                if !read(1u64 << shift, &mut d) {
-                    return None;
-                }
-                d
-            } else {
-                head.clone()
-            };
-            let mut pad = disc_head.clone();
-            pad.resize(0x440, 0);
-            let mut d = IsoDisc::new(pad);
-            let h = DiscHeader::read(&mut d).ok()?;
-            let mut title = h.title;
-            if system == System::GameCube {
-                if let Some(b) = core_gcn::disc::read_banner(read) {
-                    if !b.long_name.is_empty() && !h.game_id.get(3).is_some_and(|&r| r == b'J') {
-                        title = b.long_name;
-                    }
-                    icon = Some((96, 32, b.image));
-                }
-            }
-            (String::from_utf8_lossy(&h.game_id).into_owned(), title)
-        }
     };
     let ac = animal_crossing::lookup(system, code.as_bytes());
     if let Some(t) = ac {
@@ -215,7 +138,6 @@ pub struct Session {
     pub core: Box<dyn EmulatorCore>,
     pub input: InputState,
     pub policy: ThermalPolicy,
-    pub gpu: GpuVendorProfile,
     audio_tx: AudioProducer,
     audio_rx: Option<AudioConsumer>,
     resampler: Resampler,
@@ -246,8 +168,7 @@ impl Session {
         Self {
             core,
             input: InputState::default(),
-            policy: ThermalPolicy::new(UserGraphicsPrefs::default()),
-            gpu: GpuVendorProfile::Generic,
+            policy: ThermalPolicy::new(),
             audio_tx: tx,
             audio_rx: Some(rx),
             resampler: Resampler::new(rate, OUTPUT_RATE),
@@ -409,7 +330,6 @@ impl Session {
         let hz = match self.core.system() {
             System::Gba => 59.7275,
             System::Nds => 59.8261,
-            System::GameCube | System::Wii => 59.94,
         };
         Duration::from_secs_f64(1.0 / hz)
     }
@@ -442,8 +362,6 @@ impl Session {
         let layout = match setup.layout {
             ControlLayout::Classic => "classic",
             ControlLayout::StylusFirst => "stylus",
-            ControlLayout::DualStick => "dualstick",
-            ControlLayout::Pointer => "pointer",
         };
         let now = self.core.clock().now();
         format!(
@@ -462,7 +380,6 @@ impl Session {
 
     /// Text for the mobile debugger sheet.
     pub fn debug_info(&self) -> String {
-        let knobs = self.policy.knobs();
         let clusters: Vec<String> = self
             .topology
             .clusters
@@ -470,18 +387,15 @@ impl Session {
             .map(|c| format!("{:?} {} MHz x{}", c.kind, c.max_freq_khz / 1000, c.cpus.len()))
             .collect();
         format!(
-            "system={}\ngpu={}\nhost_page_size={}\nsoc={} ({})\nclusters={}\narmv9={}\nthermal={:?}\nubershaders={}\ndsp={:?}\nmax_scale={}\nframe_ms={:.2}\nframes={}\nspeed={}x\nrewind_states={}\ncheats={}\n",
+            "system={}\nhost_page_size={}\nsoc={} ({})\nclusters={}\narmv9={}\nthermal={:?}\nframeskip={}\nframe_ms={:.2}\nframes={}\nspeed={}x\nrewind_states={}\ncheats={}\n",
             self.core.system().name(),
-            self.gpu.name(),
             kd_core::arena::host_page_size(),
             self.topology.generation(),
             self.topology.layout(),
             clusters.join(", "),
             self.features.is_armv9_class(),
             self.policy.status(),
-            knobs.async_ubershaders,
-            knobs.dsp_mode,
-            knobs.max_internal_scale,
+            self.policy.frameskip(),
             self.stats.avg_frame_us / 1000.0,
             self.stats.frames,
             self.speed,
@@ -563,12 +477,7 @@ mod tests {
     fn detects_systems() {
         assert_eq!(detect_system("Game.GBA", &[]), Some(System::Gba));
         assert_eq!(detect_system("wild_world.nds", &[]), Some(System::Nds));
-        let mut gc = vec![0u8; 0x440];
-        gc[0x1C..0x20].copy_from_slice(&GC_MAGIC.to_be_bytes());
-        assert_eq!(detect_system("ac.iso", &gc), Some(System::GameCube));
-        let mut wii = vec![0u8; 0x440];
-        wii[0x18..0x1C].copy_from_slice(&WII_MAGIC.to_be_bytes());
-        assert_eq!(detect_system("cityfolk.iso", &wii), Some(System::Wii));
+        assert_eq!(detect_system("ac.iso", &[0; 0x440]), None, "discs are not supported");
         assert_eq!(detect_system("noext", &gba_rom()), Some(System::Gba));
         assert_eq!(detect_system("readme.txt", b"hello"), None);
     }
@@ -670,22 +579,23 @@ mod tests {
         assert_eq!(s.clock_offset(), 86_400);
         s.set_clock_offset(0);
         assert_eq!(s.clock_offset(), 0);
-        assert!(s.set_thermal_status(2), "MODERATE changes the knobs");
-        assert!(s.debug_info().contains("ubershaders=true"));
+        assert!(!s.set_thermal_status(2), "MODERATE needs no mitigation");
+        assert!(s.set_thermal_status(4), "CRITICAL turns on frame skip");
+        assert!(s.debug_info().contains("frameskip=1"));
         assert_eq!(s.animal_crossing_info(), "", "not an Animal Crossing game");
     }
 
     #[test]
     fn peek_reports_animal_crossing_titles() {
-        let mut gc = vec![0u8; 0x440];
-        gc[..6].copy_from_slice(b"GAFE01");
-        gc[0x1C..0x20].copy_from_slice(&GC_MAGIC.to_be_bytes());
-        let (sys, code, title) = peek_title("ac.gcm", &gc).unwrap();
-        assert_eq!((sys, code.as_str(), title.as_str()), (System::GameCube, "GAFE01", "Animal Crossing"));
+        let mut ds = vec![0u8; 0x440];
+        ds[..9].copy_from_slice(b"WILDWORLD");
+        ds[0x0C..0x10].copy_from_slice(b"ADME");
+        let (sys, code, title) = peek_title("ww.nds", &ds).unwrap();
+        assert_eq!((sys, code.as_str(), title.as_str()), (System::Nds, "ADME", "Animal Crossing: Wild World"));
     }
 
     #[test]
-    fn game_info_reads_ds_banner_and_wbfs_header() {
+    fn game_info_reads_ds_banner() {
         let mut rom = vec![0u8; 0x2000];
         rom[0..12].copy_from_slice(b"HOMEBREW\0\0\0\0");
         rom[0x0C..0x10].copy_from_slice(b"KDHB");
@@ -707,22 +617,6 @@ mod tests {
         assert_eq!((w, h), (32, 32));
         assert_eq!(px[0], 0xFFFF_0000, "blue in RGBA byte order");
         assert!(!info.animal_crossing);
-
-        // WBFS: header sector shift 9 → disc header copy at 512.
-        let mut wbfs = vec![0u8; 0x800];
-        wbfs[..4].copy_from_slice(b"WBFS");
-        wbfs[8] = 9;
-        wbfs[0x200..0x206].copy_from_slice(b"RUUE01");
-        wbfs[0x218..0x21C].copy_from_slice(&WII_MAGIC.to_be_bytes());
-        wbfs[0x220..0x22A].copy_from_slice(b"City Folk!");
-        let mut read = |off: u64, buf: &mut [u8]| {
-            let o = off as usize;
-            wbfs.get(o..o + buf.len()).map(|s| buf.copy_from_slice(s)).is_some()
-        };
-        let info = game_info("cf.wbfs", &mut read).unwrap();
-        assert_eq!(info.system, System::Wii);
-        assert_eq!(info.code, "RUUE01");
-        assert!(info.animal_crossing, "City Folk recognised");
 
         let tiny = gba_rom();
         let mut read = |off: u64, buf: &mut [u8]| {

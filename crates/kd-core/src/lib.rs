@@ -5,15 +5,14 @@
 //! * [`scheduler`] — deterministic min-heap event scheduler on a `u64` master clock.
 //! * [`savestate`] — versioned, checksummed, sectioned save states.
 //! * [`audio`] — lock-free SPSC ring buffer and dynamic-rate resampler for AAudio.
-//! * [`arena`] — `memfd`-backed guest RAM and dual-mapped W^X JIT arenas that
-//!   respect the host page size (4 KB or 16 KB).
+//! * [`arena`] — host page size (4 KB or 16 KB).
 //! * [`topology`] — Tensor G1–G5 cluster detection, `sched_setaffinity`
 //!   pinning and AArch64 feature detection.
-//! * [`thermal`] — Vulkan vendor profiles and ADPF thermal policy.
+//! * [`thermal`] — ADPF thermal policy.
 //! * [`clock`] — guest RTCs with per-game time travel.
 //! * [`animal_crossing`] — the Animal Crossing profile for each system.
 //! * [`input`] — front-end input snapshot.
-//! * [`cheats`] — Action Replay, GameShark, CodeBreaker, Gecko and raw codes.
+//! * [`cheats`] — Action Replay, GameShark, CodeBreaker and raw codes.
 //! * [`rewind`] — delta-compressed rewind history.
 
 pub mod animal_crossing;
@@ -41,8 +40,6 @@ pub use scheduler::{EventKind, Scheduler};
 pub enum System {
     Gba = 1,
     Nds = 2,
-    GameCube = 3,
-    Wii = 4,
 }
 
 impl System {
@@ -50,8 +47,6 @@ impl System {
         match self {
             System::Gba => "Game Boy Advance",
             System::Nds => "Nintendo DS",
-            System::GameCube => "GameCube",
-            System::Wii => "Wii",
         }
     }
 }

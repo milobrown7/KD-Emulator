@@ -2,7 +2,7 @@
 //!
 //! JNI surface for `com.kdemulator.bridge.NativeEmulatorBridge`:
 //! loading games from Storage Access Framework file descriptors, library
-//! metadata (titles, DS icons, GameCube banners), the emulation thread
+//! metadata (titles, DS icons), the emulation thread
 //! (pinned to Prime/Mid cores), frame hand-off to the Kotlin `GameView`,
 //! AAudio output, input, microphone, thermal status, save states, backup
 //! memory, fast-forward, rewind, cheats, the mobile debugger and Animal
@@ -119,43 +119,8 @@ pub fn read_fd(fd: i32) -> std::io::Result<Vec<u8>> {
     Ok(data)
 }
 
-/// Read up to `n` bytes from the start of a descriptor (library peeks).
-pub fn read_fd_prefix(fd: i32, n: usize) -> std::io::Result<Vec<u8>> {
-    let mut buf = vec![0u8; n];
-    // SAFETY: pread into our own buffer; does not move the file offset.
-    let got = unsafe { libc::pread(fd, buf.as_mut_ptr() as *mut libc::c_void, n, 0) };
-    if got < 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    buf.truncate(got as usize);
-    Ok(buf)
-}
-
-/// Load from a descriptor: disc images are streamed, cartridges read whole.
+/// Load a cartridge from a descriptor.
 fn load_fd(fd: i32, name: &str) -> jint {
-    let lower = name.to_ascii_lowercase();
-    if lower.ends_with(".iso") || lower.ends_with(".gcm") {
-        let prefix = read_fd_prefix(fd, 0x440).unwrap_or_default();
-        if session::detect_system(name, &prefix) == Some(kd_core::System::GameCube) {
-            use std::os::fd::FromRawFd;
-            // SAFETY: dup gives the disc its own descriptor.
-            let dup = unsafe { libc::dup(fd) };
-            if dup < 0 {
-                return -1;
-            }
-            let file = unsafe { std::fs::File::from_raw_fd(dup) };
-            let core = core_gcn::disc::FileDisc::new(file)
-                .map_err(|e| e.to_string())
-                .and_then(|d| core_gcn::GameCube::boot_disc(Box::new(d)).map_err(|e| e.to_string()));
-            return match core {
-                Ok(gc) => install(name, Box::new(gc)),
-                Err(e) => {
-                    log(&format!("load failed: {e}"));
-                    -1
-                }
-            };
-        }
-    }
     match read_fd(fd) {
         Ok(data) => load(name, data),
         Err(e) => {
@@ -179,8 +144,6 @@ fn install(name: &str, core: Box<dyn kd_core::EmulatorCore>) -> jint {
     stop_thread();
     let system = core.system() as jint;
     let mut s = Session::new(core);
-    let cache = with_runtime(|rt| rt.cache_dir.clone());
-    s.gpu = detect_gpu(&cache);
     let consumer = s.take_audio_consumer();
     with_runtime(|rt| {
         rt.frame.lock().unwrap_or_else(|p| p.into_inner()).publish(&s.core.frame());
@@ -194,26 +157,6 @@ fn install(name: &str, core: Box<dyn kd_core::EmulatorCore>) -> jint {
     });
     log(&format!("loaded {name} as system {system}"));
     system
-}
-
-/// Query the Vulkan vendor once (PowerVR DXT vs Mali) and keep the
-/// pipeline cache in the app's cacheDir.
-fn detect_gpu(cache_dir: &str) -> kd_core::thermal::GpuVendorProfile {
-    let path = format!("{cache_dir}/pipeline_cache.bin");
-    let blob = std::fs::read(&path).ok();
-    match gpu_gx_vk::vulkan::VulkanContext::new(&[], &[], blob.as_deref(), 1, 1) {
-        Ok(ctx) => {
-            if let Ok(data) = ctx.save_pipeline_cache() {
-                let _ = std::fs::write(&path, data);
-            }
-            log(&format!("GPU: {} → {}", ctx.device_name(), ctx.profile.vendor.name()));
-            ctx.profile.vendor
-        }
-        Err(e) => {
-            log(&format!("Vulkan unavailable ({e}); software GX"));
-            kd_core::thermal::GpuVendorProfile::Generic
-        }
-    }
 }
 
 fn start_thread() {
@@ -245,7 +188,11 @@ fn start_thread() {
                         let mut s = session.lock().unwrap_or_else(|p| p.into_inner());
                         let t0 = Instant::now();
                         s.step();
-                        frame.lock().unwrap_or_else(|p| p.into_inner()).publish(&s.core.frame());
+                        // When the phone is critically hot, present only every (skip+1)th frame.
+                        let skip = s.policy.frameskip() as u64;
+                        if s.stats.frames % (skip + 1) == 0 {
+                            frame.lock().unwrap_or_else(|p| p.into_inner()).publish(&s.core.frame());
+                        }
                         last_ns.store(t0.elapsed().as_nanos() as i64, Ordering::Relaxed);
                         s.frame_period()
                     };
@@ -599,7 +546,7 @@ pub extern "system" fn Java_com_kdemulator_bridge_NativeEmulatorBridge_nativeSet
     guard((), || {
         let changed = with_session(false, |s| s.set_thermal_status(status));
         if changed {
-            log(&format!("thermal status {status}: performance knobs updated"));
+            log(&format!("thermal status {status}: frame skip updated"));
         }
     })
 }

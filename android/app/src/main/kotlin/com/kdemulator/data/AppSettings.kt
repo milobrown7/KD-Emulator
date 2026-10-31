@@ -18,7 +18,6 @@ data class Settings(
     val autoResume: Boolean = true,
     val smoothScaling: Boolean = false,
     val microphone: Boolean = false,
-    val gyroPointer: Boolean = false,
     /** Skin identifier per console (absent = the built-in skin). */
     val skins: Map<Console, String> = emptyMap(),
 )
@@ -39,7 +38,6 @@ class AppSettings(context: Context) {
         autoResume = prefs.getBoolean("autoResume", true),
         smoothScaling = prefs.getBoolean("smoothScaling", false),
         microphone = prefs.getBoolean("microphone", false),
-        gyroPointer = prefs.getBoolean("gyroPointer", false),
         skins = Console.entries.mapNotNull { c -> prefs.getString("skin_${c.name}", null)?.let { c to it } }.toMap(),
     )
 
@@ -55,7 +53,6 @@ class AppSettings(context: Context) {
             .putBoolean("autoResume", s.autoResume)
             .putBoolean("smoothScaling", s.smoothScaling)
             .putBoolean("microphone", s.microphone)
-            .putBoolean("gyroPointer", s.gyroPointer)
             .apply {
                 Console.entries.forEach { c ->
                     val id = s.skins[c]

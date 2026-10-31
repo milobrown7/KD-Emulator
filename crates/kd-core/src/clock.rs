@@ -1,7 +1,7 @@
 //! Guest real-time clocks with "time travel".
 //!
 //! Every system KD-Emulator targets has a battery-backed clock that games read
-//! for their calendar — most famously Animal Crossing on GameCube, DS and Wii,
+//! for their calendar — most famously Animal Crossing: Wild World on the DS,
 //! where seasons, events, visitors and turnip prices follow the console date.
 //! A [`GuestClock`] is the host wall clock plus a user-controlled offset, so
 //! players can visit a different season or undo an accidental skip without

@@ -1,10 +1,10 @@
 # KD-Emulator — working notes for Claude
 
-KD-Emulator is an Android multi-system emulator (Game Boy Advance, Nintendo DS,
-GameCube, Wii) written as a Rust workspace with a Kotlin / Jetpack Compose
-front end. It targets Google Tensor phones: G1–G4 (ARM Mali, Vulkan vendor
-0x13B5) and G5 (Imagination PowerVR DXT, vendor 0x1010, 1+5+2 ARMv9.2
-clusters). Every system has an **Animal Crossing profile** (see below).
+KD-Emulator is an Android emulator for Game Boy Advance and Nintendo DS,
+written as a Rust workspace with a Kotlin / Jetpack Compose front end modelled
+on Delta. It targets Google Tensor phones (G1–G4, and G5 with 1+5+2 ARMv9.2
+clusters). Both systems have an **Animal Crossing profile** (see below).
+GameCube and Wii support was removed in 0.3.0.
 
 `STATUS.md` is the live implementation and test checklist. Update it in the same
 commit as any change that adds, removes or fixes a feature.
@@ -17,13 +17,10 @@ commit as any change that adds, removes or fixes a feature.
   gaps list in `STATUS.md`.
 - No Nintendo BIOS, firmware, keys or game data in the repo. The GBA and NDS
   BIOS are HLE (high-level emulation), and the NDS firmware is synthesized.
-  Wii retail discs need the user's own common key. DSP LLE needs the user's
-  own IROM/DROM.
 - Everything must pass `cargo test --workspace` on the host (x86_64 Linux),
-  with no device attached. Code that only runs on aarch64 or Android, such as
-  JIT execution, AAudio or ANativeWindow, sits behind `cfg` and has a
-  host-testable equivalent: the JIT is checked by an AArch64 interpreter
-  written into its tests.
+  with no device attached. Code that only runs on Android, such as AAudio,
+  sits behind `cfg(target_os = "android")` and has a host-testable
+  equivalent.
 - Keep `cargo clippy --workspace --all-targets -- -D warnings` clean.
   Formatting: `cargo fmt` (`rustfmt.toml`: max_width 120).
 - MSRV is Rust 1.82 (`rust-version` in the workspace `Cargo.toml`).
@@ -70,16 +67,11 @@ The app is arm64-v8a only, minSdk 31, targetSdk 35.
 
 | Crate | Role |
 |---|---|
-| `kd-core` | Shared runtime: `EmulatorCore` trait, deterministic scheduler, sectioned save states (`KDST` + CRC32), lock-free SPSC audio ring and resampler, `PageAwareArena`/`JitArena`, Tensor topology, hwcaps, `ThermalPolicy`, `GuestClock` (time travel), Animal Crossing profile table, input bits |
+| `kd-core` | Shared runtime: `EmulatorCore` trait, deterministic scheduler, sectioned save states (`KDST` + CRC32), lock-free SPSC audio ring and resampler, host page size, Tensor topology, hwcaps, `ThermalPolicy`, `GuestClock` (time travel), cheats, rewind, Animal Crossing profile table, input bits |
 | `cpu-arm` | ARM7TDMI / ARM946E-S interpreter (4096-entry ARM and 1024-entry Thumb decode tables), CP15 + TCM, assembler, shared HLE BIOS routines |
-| `core-gba` | GBA: bus, PPU, APU, DMA, timers, cartridge saves, GPIO RTC/solar sensor, tilt, JoyBus (GameCube link), multiboot |
+| `core-gba` | GBA: bus, PPU, APU, DMA, timers, cartridge saves, GPIO RTC/solar sensor, tilt, JoyBus link mode, multiboot |
 | `core-nds` | NDS: ARM9 + ARM7 in lockstep, VRAM banking, 2D engines, 3D geometry and rasterizer, IPC, SPI (firmware/touch/power), RTC, game card, saves |
-| `cpu-ppc` | Gekko/Broadway: interpreter, paired singles, GQR quantization, BATs, page tables, 4 KB SoftTLB, AArch64 block JIT |
-| `gpu-gx-vk` | GX: command FIFO, CP/XF, texture decoders, TEV, GLSL → SPIR-V via naga, software rasterizer with EFB/XFB, vendor `RendererProfile`, Vulkan bring-up and pipeline cache |
-| `dsp-gc` | DSP interface, ARAM and AI DMA, ADPCM, AX HLE mixer, LLE core (subset) |
-| `core-gcn` | GameCube: Flipper bus and MMIO, disc formats, DOL loader, HLE apploader, EXI (IPL/RTC/SRAM, memory cards), SI (pads, GBA link) |
-| `core-wii` | Wii: Hollywood registers, MEM2, IOS HLE (`/dev/fs`, `/dev/es`, `/dev/di`, `/dev/sdio/slot0`, `/dev/stm`, BT), WBFS, WAD parsing, Wii Remote reports |
-| `android-jni` | `libkd_emulator.so`: session/runtime, JNI exports (`com.kdemulator.bridge.NativeEmulatorBridge`), ANativeWindow blit, AAudio, emulation thread |
+| `android-jni` | `libkd_emulator.so`: session/runtime, JNI exports (`com.kdemulator.bridge.NativeEmulatorBridge`), frame slot, AAudio, emulation thread |
 
 Android app: `android/app/src/main/kotlin/com/kdemulator/` (package
 `com.kdemulator`).
@@ -90,47 +82,17 @@ Android app: `android/app/src/main/kotlin/com/kdemulator/` (package
   `-z max-page-size=16384` and `-z common-page-size=16384`. Check with
   `llvm-readelf -lW libkd_emulator.so`: every `LOAD` must show `Align 0x4000`.
 - Never hard-code 4096. Use `kd_core::arena::host_page_size()` (from
-  `sysconf(_SC_PAGESIZE)`) and round allocations to it.
-- Guest RAM lives in a `PageAwareArena` (memfd-backed, page-aligned).
-- JIT memory is a memfd mapped twice: an RW view for writing and an RX view
-  for running (W^X). After writing code, call `flush_icache`
-  (`dc cvau` / `dsb ish` / `ic ivau` / `dsb ish` / `isb`) before running it.
-- Guest pages are 4 KB, while the host may use 16 KB pages. Guest address
-  translation therefore goes through the 4 KB-granular `SoftTlb` (cpu-ppc).
-  Never `mprotect` host pages to track guest pages.
+  `sysconf(_SC_PAGESIZE)`) if page size ever matters.
 - The APK keeps `.so` files uncompressed (`useLegacyPackaging = false`,
   `extractNativeLibs=false`), so they must be 16 KB aligned inside the zip.
 
-## Tensor G1–G5 driver rules
+## Tensor rules
 
-- Pick the GPU profile by Vulkan `vendorID`:
-  - `0x13B5`: ARM Mali (G1–G4)
-  - `0x1010`: PowerVR DXT (G5)
-  - anything else: Generic
-
-  The profile lives in `GpuVendorProfile` (kd-core) and `RendererProfile`
-  (gpu-gx-vk).
-- PowerVR DXT (G5):
-  - Never emit `OpKill`/`discard` when the alpha test always passes. It
-    defeats hidden-surface removal. The shader generator checks the
-    generated SPIR-V for `OpKill` (a test enforces this).
-  - MSAA is off.
-  - Compute workgroups are 32 wide.
-- Mali (G1–G4): compute workgroups are 64 wide, MSAA is allowed, and the EFB
-  is done in subpasses.
-- Write the `VkPipelineCache` to the app `cacheDir` in the `KDPC` container
-  (header: vendor, device, driver version, UUID). If the header doesn't match
-  the current GPU, the cache is thrown away.
 - Thermal: ADPF thermal status reaches `ThermalPolicy::on_status_changed`
-  through `nativeSetThermalStatus`.
-
-  | Status | Max internal scale | Shaders | DSP |
-  |---|---|---|---|
-  | None / Light | 4× | user setting | user setting |
-  | MODERATE | 2× | async uber-shaders | HLE |
-  | SEVERE and above | 1× | async uber-shaders | HLE |
-
-  The `PerformanceHintManager` session is fed the real frame time each frame.
+  through `nativeSetThermalStatus`. GBA/DS emulation is light, so the only
+  mitigation is presenting every 2nd frame at CRITICAL and every 3rd at
+  EMERGENCY and above.
+- The `PerformanceHintManager` session is fed the real frame time each frame.
 - CPU topology: read `/sys/devices/system/cpu/cpu*/cpufreq` to find clusters.
   Pin the emulation thread to the fastest cluster with `sched_setaffinity`.
   On G5, ARMv9.2 features come from hwcaps (SVE2, BF16, I8MM), never from
@@ -184,35 +146,6 @@ ARM7:
 Games boot directly: the header is copied to `0x027FFE00` and the secure area
 is skipped.
 
-**GameCube (physical):**
-
-| Address | Region |
-|---|---|
-| `0x00000000` | MEM1 24 MB. Virtual `0x80000000` (cached) / `0xC0000000` (uncached). |
-| `0x08000000` | EFB |
-| `0x0C000000` | CP |
-| `0x0C001000` | PE |
-| `0x0C002000` | VI |
-| `0x0C003000` | PI |
-| `0x0C004000` | MI |
-| `0x0C005000` | DSP |
-| `0x0C006000` | DI |
-| `0x0C006400` | SI |
-| `0x0C006800` | EXI |
-| `0x0C006C00` | AI |
-| `0x0C008000` | Gather pipe (feeds GX) |
-
-The HLE apploader return trampoline is at `0x81300000`.
-
-**Wii:**
-
-- Everything in the GameCube map.
-- MEM2 64 MB at `0x10000000` (virtual `0x90000000` / `0xD0000000`).
-- Hollywood at `0x0D000000`:
-  - IPC at `0x0D000000`: PPCMSG, PPCCTRL, ARMMSG.
-  - IRQ flags/mask at `0x0D000030` / `0x0D000034`.
-- The legacy DI/SI/EXI/AI block is mirrored at `0x0D006000`.
-
 ## Animal Crossing profiles
 
 `kd_core::animal_crossing` maps game codes to a per-system setup. The UI gets
@@ -220,10 +153,8 @@ it through `nativeGetAnimalCrossingInfo`.
 
 | System | Codes | Setup |
 |---|---|---|
-| GBA | (no standalone title) | JoyBus link companion. Multiboot images from Animal Crossing (GameCube) boot through `Gba::new_multiboot`. |
+| GBA | (no standalone title) | JoyBus link mode. Multiboot images (`.mb`) boot through `Gba::new_multiboot`. |
 | NDS | ADMJ/ADME/ADMP/ADMK | Stylus layout, RTC time travel, 256 KB FLASH save |
-| GameCube | GAFJ/GAEJ/GAFE/GAFP/GAFU | Memory Card 251, GBA link on port 2, time travel |
-| Wii | RUUJ/RUUE/RUUP/RUUK | Pointer layout, SD card, time travel |
 
 Time travel only shifts the guest clock (`GuestClock` offset, saved per game).
 It never changes the host clock.
@@ -246,5 +177,4 @@ It never changes the host clock.
 - Controller skins use Delta's `info.json` model (`skins/SkinModel.kt`).
   Built-in skins are generated per screen size in `BuiltInSkins.kt`; input
   names follow Delta's (`a`, `b`, `up`, `menu`, `toggleFastForward`, …), plus
-  `rewind`, `one`, `two`, `plus`, `minus`, `home`, `c`, `z`, and the
-  `analogStick*` and `cStick*` inputs.
+  `rewind`.
