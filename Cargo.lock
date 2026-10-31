@@ -77,10 +77,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "core-gcn"
+version = "0.1.0"
+dependencies = [
+ "core-gba",
+ "cpu-ppc",
+ "dsp-gc",
+ "gpu-gx-vk",
+ "kd-core",
+ "tracing",
+]
+
+[[package]]
 name = "core-nds"
 version = "0.1.0"
 dependencies = [
  "cpu-arm",
+ "kd-core",
+ "tracing",
+]
+
+[[package]]
+name = "core-wii"
+version = "0.1.0"
+dependencies = [
+ "core-gcn",
+ "cpu-ppc",
  "kd-core",
  "tracing",
 ]

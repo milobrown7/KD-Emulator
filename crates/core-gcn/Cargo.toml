@@ -1,0 +1,14 @@
+[package]
+name = "core-gcn"
+description = "GameCube core: Flipper bus (CP/PE/VI/PI/MI/DI/SI/EXI/AI/DSP), 24 MB 1T-SRAM on a 16 KB-safe arena, DOL/ISO/GCM loading with HLE apploader, controllers, memory cards and the GBA link port"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kd-core.workspace = true
+cpu-ppc.workspace = true
+gpu-gx-vk.workspace = true
+dsp-gc.workspace = true
+core-gba.workspace = true
+tracing.workspace = true

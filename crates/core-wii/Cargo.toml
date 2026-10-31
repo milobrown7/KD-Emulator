@@ -1,0 +1,12 @@
+[package]
+name = "core-wii"
+description = "Wii core: Broadway + Hollywood on top of core-gcn, 64 MB MEM2, Starlet IOS HLE IPC router, WBFS/WAD containers and Wiimote/Nunchuk/Classic HID report synthesis"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kd-core.workspace = true
+cpu-ppc.workspace = true
+core-gcn = { path = "../core-gcn" }
+tracing.workspace = true
