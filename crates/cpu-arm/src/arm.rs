@@ -628,7 +628,7 @@ fn single_transfer<B: Bus>(cpu: &mut Arm, bus: &mut B, insn: u32) {
         if byte {
             bus.write8(addr, value as u8, Access::NonSeq);
         } else {
-            bus.write32(addr & !3, value, Access::NonSeq);
+            bus.write32(addr, value, Access::NonSeq);
         }
         if do_writeback {
             cpu.r[rn] = offset_addr;
@@ -671,7 +671,7 @@ fn halfword_transfer<B: Bus>(cpu: &mut Arm, bus: &mut B, insn: u32) {
     match sh {
         1 => {
             let value = if rd == 15 { cpu.r[15].wrapping_add(4) } else { cpu.r[rd] };
-            bus.write16(addr & !1, value as u16, Access::NonSeq);
+            bus.write16(addr, value as u16, Access::NonSeq);
             if do_writeback {
                 cpu.r[rn] = offset_addr;
             }
@@ -789,7 +789,8 @@ pub(crate) fn block_transfer_common<B: Bus>(
                 continue;
             }
             let v = if i == 15 {
-                cpu.r[15].wrapping_add(4)
+                // Stored PC is the instruction address + 12 (ARM) / + 6 (Thumb).
+                cpu.r[15].wrapping_add(if cpu.thumb() { 2 } else { 4 })
             } else if user_bank {
                 cpu.user_reg(i)
             } else if i == rn && writeback && i != first && !cpu.is_v5() {

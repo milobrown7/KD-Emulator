@@ -61,6 +61,9 @@ pub trait Bus {
     fn read16(&mut self, addr: u32, access: Access) -> u16;
     fn read32(&mut self, addr: u32, access: Access) -> u32;
     fn write8(&mut self, addr: u32, value: u8, access: Access);
+    /// Halfword/word stores pass the address unaligned, as it appears on the
+    /// bus: implementations align it themselves, except for devices that see
+    /// the low bits (the GBA's 8-bit save chip).
     fn write16(&mut self, addr: u32, value: u16, access: Access);
     fn write32(&mut self, addr: u32, value: u32, access: Access);
 

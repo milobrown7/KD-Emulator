@@ -1,42 +1,28 @@
-## KD-Emulator 0.2.0
+## KD-Emulator 0.3.0
 
-An Android emulator for Game Boy Advance, Nintendo DS, GameCube and Wii, with a Delta-style app and an
-Animal Crossing profile on every console.
+A Game Boy Advance and Nintendo DS emulator for Android, with a Delta-style app.
 
-**Install:** download `KD-Emulator-v0.2.0.apk` below and open it on your phone. You'll need to allow
-installs from your browser or file manager. The app is for 64-bit ARM phones running Android 12 or newer.
-It's tuned for Google Tensor (Pixel 6 and later), and its native code is aligned for 16 KB pages.
+**Install:** download `KD-Emulator-v0.3.0.apk` below and open it on your phone (allow installs from your browser or
+file manager). The app needs a 64-bit ARM phone on Android 12 or newer. If you installed 0.2.0, uninstall it first:
+each release is signed with a fresh key until a permanent signing key is set up.
 
-### What's new
-- **Delta-style library:** one page per console, artwork tiles and a long-press menu. Artwork is the DS icon or
-  GameCube banner from the game itself, or a picture you choose. The long-press menu has resume, start over,
-  rename, change artwork, cheats, import/export save file and delete.
-- **Importing:** pick game files or `.zip` archives. Cartridges are copied into the app. Large GameCube/Wii
-  discs stay where they are.
-- **Controller skins:** built-in skins for every console in portrait and landscape. All fingers are tracked
-  at once, you can slide between buttons, and the d-pad does diagonals. The DS bottom screen takes touch,
-  and the Wii pointer follows your finger. You can import `.deltaskin` files for GBA and DS, and set opacity and
-  haptics.
-- **Pause menu:** save and load state (with screenshots), cheat codes, fast forward (2–8×), rewind, hold
-  buttons, screenshot, time travel, DS microphone and debug info.
-- **Auto save:** leaving a game saves its state, and opening it again resumes where you were. Battery saves
-  are written automatically.
-- **Cheats:**
-  - GBA: GameShark/Action Replay v1–v2, CodeBreaker and raw codes.
-  - DS: Action Replay.
-  - GameCube and Wii: Gecko.
-- **DS sound:** the full 16-channel sound chip is now emulated, including the capture units, so DS games
-  have audio. The phone's microphone can be used for blowing and voice.
-- **Animal Crossing:** Wild World and City Folk are recognised with a 🍃 badge. Time travel moves only the
-  game's clock.
+### Changes
+- **GameCube and Wii removed.** Neither could run commercial games, so the app is now GBA and DS only.
+- **GBA accuracy:** the emulator now passes every ROM in jsmolka's public GBA test suite (ARM, Thumb, memory,
+  BIOS, save types, PPU demos) and 50,000 randomised CPU tests from FuzzARM. Fixes:
+  - Thumb store-multiple with an empty register list stored the wrong PC value.
+  - SRAM/Flash saves written with halfword or word stores went to the wrong byte. Games that save this way now
+    keep their saves correctly.
+  - Brand-new SRAM saves now start blank (0xFF) like a real cartridge, so games detect a fresh save properly.
+  - The BIOS value games can read after an interrupt now matches real hardware.
+  - The BIOS calls SoundBias, HardReset and CustomHalt now work.
+- When the phone gets critically hot, the screen updates less often (every 2nd or 3rd frame) to let it cool.
 
-### Known limits
-- GBA and DS are the most complete.
-- **GameCube and Wii games don't reach gameplay yet**, Animal Crossing included. The audio chip's ucode
-  handshake, memory card unlock and hardware lighting are still missing.
-- Wii retail discs need your own console's common key.
-- This release hasn't been tested on a physical phone yet. The app was exercised with JVM UI tests and
-  the emulator cores with 240+ host tests.
-- No BIOS or firmware files are needed for GBA, DS or GameCube. Use dumps of games you own.
+### Still true from 0.2.0
+- Delta-style library, controller skins (including `.deltaskin` import), save states with screenshots, rewind,
+  fast forward, cheats (GameShark, CodeBreaker, Action Replay), auto-resume, DS sound and microphone.
+- Not yet tested on a physical phone: the app is exercised by JVM UI tests and the emulator by 157 host tests
+  plus the public GBA test ROMs.
+- No BIOS or firmware files are needed. Use dumps of games you own.
 
 KD-Emulator isn't affiliated with Nintendo or with Delta.

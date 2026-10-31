@@ -1089,10 +1089,12 @@ impl Bus for Bus9<'_> {
         self.w8(addr, v)
     }
     fn write16(&mut self, addr: u32, v: u16, _: Access) {
+        let addr = addr & !1;
         self.s.time[ARM9] += self.cost(addr);
         self.w16(addr, v)
     }
     fn write32(&mut self, addr: u32, v: u32, _: Access) {
+        let addr = addr & !3;
         self.s.time[ARM9] += self.cost(addr);
         self.w32(addr, v)
     }
@@ -1330,10 +1332,12 @@ impl Bus for Bus7<'_> {
         self.mem_write(addr, v as u32, 1)
     }
     fn write16(&mut self, addr: u32, v: u16, _: Access) {
+        let addr = addr & !1;
         self.s.time[ARM7] += self.cost(addr);
         self.mem_write(addr, v as u32, 2)
     }
     fn write32(&mut self, addr: u32, v: u32, _: Access) {
+        let addr = addr & !3;
         self.s.time[ARM7] += self.cost(addr);
         self.mem_write(addr, v, 4)
     }

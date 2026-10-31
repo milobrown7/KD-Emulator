@@ -3,7 +3,7 @@
 What is implemented, how each part is verified, and what is still missing.
 Update this file in the same commit as the code it describes.
 
-**Last verified:** 148 host tests passing (`cargo test --workspace`) and 2 app UI tests (Robolectric, `./gradlew testDebugUnitTest`). `cargo clippy --workspace --all-targets -- -D warnings`
+**Last verified:** 157 host tests passing (`cargo test --workspace`) and 2 app UI tests (Robolectric, `./gradlew testDebugUnitTest`). `cargo clippy --workspace --all-targets -- -D warnings`
 is clean. `cargo check --target aarch64-linux-android -p android-jni` passes. `libkd_emulator.so` was built with
 NDK r28 / cargo-ndk 4.1.2, and every `LOAD` segment is `Align 0x4000`, with 30 JNI exports.
 `./gradlew assembleDebug` and `assembleRelease` (R8) both succeed (AGP 8.7.3, Kotlin 2.1.0, compileSdk 35). In
@@ -39,6 +39,16 @@ both APKs the stripped 1.1 MB `libkd_emulator.so` is stored uncompressed and pas
 - [x] Saves: SRAM, Flash 64K/128K (IDs, erase, bank switch), EEPROM 512B/8KB
 - [x] Cartridge GPIO: RTC (from `GuestClock`), solar sensor; tilt sensor
 - [x] SIO JoyBus mode (the GBA side of the link cable), multiboot boot from EWRAM
+- [x] Passes every ROM in jsmolka's gba-tests (vendored, MIT; `tests/gba_tests.rs`): arm, thumb, memory, bios,
+  nes, unsafe, save none/SRAM/Flash 64K/Flash 128K, plus the hello/shades/stripes PPU demos. Fixed along the way:
+  - Thumb `STMIA` with an empty register list stored PC + 8 instead of PC + 6;
+  - halfword/word stores to SRAM/Flash ignored the low address bits (the CPU now passes unaligned store addresses
+    and each bus aligns, except the 8-bit save chip);
+  - blank SRAM read 0x00 instead of 0xFF;
+  - the BIOS open-bus value after an IRQ return (word at 0x144) was missing from the HLE BIOS.
+- [x] Passes DenSinH's FuzzARM (50 000 random ARM/Thumb data-processing, multiply and load/store cases; GPL-3, so
+  run locally, not vendored)
+- [x] HLE BIOS: SoundBias sets the bias level, HardReset and CustomHalt are implemented
 
 ### Phase 3 — Nintendo DS (`core-nds`): done (Wi-Fi excluded)
 - [x] ARM9 + ARM7 run in lockstep slices of 64 master cycles; direct boot from cartridge header, HLE BIOS for both CPUs
@@ -105,6 +115,7 @@ Each gap that guest code can reach is also logged at runtime with `tracing::warn
 
 **GBA**
 - Prefetch-buffer timing is approximate.
+- The BIOS's own sound driver (SWI 0x1A–0x1E, 0x20–0x24, 0x28–0x2A) is a no-op; commercial games link their own.
 
 **App**
 - Rewinding from the pause menu steps back about 3 seconds; there is no rewind timeline view yet.
@@ -116,7 +127,9 @@ Each gap that guest code can reach is also logged at runtime with `tracing::warn
 
 | Check | Command | Result |
 |---|---|---|
-| Host tests | `cargo test --workspace` | 148 passed |
+| Host tests | `cargo test --workspace` | 157 passed |
+| GBA test ROMs | `cargo test -p core-gba --test gba_tests` (jsmolka gba-tests) | all 13 ROMs pass |
+| CPU fuzzing | FuzzARM ROMs, 1500 frames each (local) | 5/5 "End of testing" |
 | App UI tests | `cd android && ./gradlew testDebugUnitTest` (Robolectric, host `libkd_emulator.so`) | 2 passed: import → library pages → play → touch A → pause menu → save state → cheats → settings → skins; landscape game screen; screenshots in `app/build/screenshots` |
 | Lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
 | Android type-check | `cargo check --target aarch64-linux-android -p android-jni` | ok |

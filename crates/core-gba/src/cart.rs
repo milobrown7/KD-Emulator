@@ -107,7 +107,8 @@ impl Backup {
             BackupKind::Flash128 => 0x20000,
             BackupKind::Eeprom => 0x2000,
         };
-        let fill = if kind == BackupKind::Sram { 0 } else { 0xFF };
+        // Blank SRAM and erased Flash both read 0xFF.
+        let fill = 0xFF;
         Self {
             kind,
             data: vec![fill; size],

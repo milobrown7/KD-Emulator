@@ -171,7 +171,7 @@ pub(crate) fn execute<B: Bus>(cpu: &mut Arm, bus: &mut B, insn: u16) {
             let rd = lo3(insn, 0);
             cpu.next_fetch = Access::NonSeq;
             match (insn >> 10) & 3 {
-                0 => bus.write16(addr & !1, cpu.r[rd] as u16, Access::NonSeq),
+                0 => bus.write16(addr, cpu.r[rd] as u16, Access::NonSeq),
                 1 => {
                     cpu.r[rd] = bus.read8(addr, Access::NonSeq) as i8 as i32 as u32;
                     bus.idle(1);
@@ -200,7 +200,7 @@ pub(crate) fn execute<B: Bus>(cpu: &mut Arm, bus: &mut B, insn: u16) {
                 cpu.r[rd] = load_half(cpu, bus, addr);
                 bus.idle(1);
             } else {
-                bus.write16(addr & !1, cpu.r[rd] as u16, Access::NonSeq);
+                bus.write16(addr, cpu.r[rd] as u16, Access::NonSeq);
             }
         }
         Op::SpLoadStore => {
@@ -287,7 +287,7 @@ fn transfer<B: Bus>(cpu: &mut Arm, bus: &mut B, rd: usize, addr: u32, load: bool
     } else if byte {
         bus.write8(addr, cpu.r[rd] as u8, Access::NonSeq);
     } else {
-        bus.write32(addr & !3, cpu.r[rd], Access::NonSeq);
+        bus.write32(addr, cpu.r[rd], Access::NonSeq);
     }
 }
 

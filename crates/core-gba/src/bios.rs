@@ -8,7 +8,7 @@
 use crate::bus::GbaBus;
 use cpu_arm::asm::{Assembler, AL};
 use cpu_arm::hle::*;
-use cpu_arm::{Arm, SwiOutcome, MODE_IRQ, MODE_SVC, MODE_SYS};
+use cpu_arm::{Access, Arm, SwiOutcome, MODE_IRQ, MODE_SVC, MODE_SYS};
 
 /// Mirror of `IF` that IRQ handlers acknowledge into (`0x03007FF8`).
 pub const BIOS_IF: u32 = 0x0300_7FF8;
@@ -40,6 +40,11 @@ pub fn stub_image() -> Vec<u8> {
     irq.word(0xE510_F004); // ldr pc, [r0, #-4]
     irq.pop(0b0101_0000_0000_1111); // ldmfd sp!, {r0-r3, r12, lr}
     irq.word(0xE25E_F004); // subs pc, lr, #4
+                           // Start of the real SWI handler. Never executed here (SWIs are HLE), but
+                           // returning from an IRQ prefetches 0x144, and games can observe that
+                           // value through the BIOS open-bus latch.
+    irq.word(0xE92D_5800); // 0x140: stmfd sp!, {r11, r12, lr}
+    irq.word(0xE55E_C002); // 0x144: ldrb r12, [lr, #-2]
     put(&mut image, 0x128, &irq.finish());
     image
 }
@@ -80,10 +85,31 @@ pub(crate) fn swi(bus: &mut GbaBus, cpu: &mut Arm, n: u8) -> SwiOutcome {
         0x16 => diff8(bus, cpu.r[0], cpu.r[1], false),
         0x17 => diff8(bus, cpu.r[0], cpu.r[1], true),
         0x18 => diff16(bus, cpu.r[0], cpu.r[1]),
-        0x19 => {} // SoundBias: ramp is instantaneous here
+        0x19 => {
+            // SoundBias: move the bias level to 0x200 (r0 != 0) or 0; the
+            // hardware ramps slowly, here it is instantaneous.
+            use cpu_arm::Bus;
+            let cur = bus.read16(0x0400_0088, Access::NonSeq);
+            let level = if cpu.r[0] != 0 { 0x200 } else { 0 };
+            bus.write16(0x0400_0088, (cur & !0x3FE) | level, Access::NonSeq);
+        }
         0x1F => cpu.r[0] = midi_key_to_freq(bus, cpu.r[0], cpu.r[1] as u8, cpu.r[2] as u8),
-        0x25 => cpu.r[0] = 1,                         // MultiBoot: no link partner → failure
-        0x1A..=0x1E | 0x20..=0x24 | 0x26..=0x2A => {} // sound driver hooks: games ship their own
+        0x25 => cpu.r[0] = 1, // MultiBoot: no link partner → failure
+        0x26 => {
+            // HardReset: the BIOS intro is skipped; RAM is cleared and the
+            // cartridge restarts from its entry point.
+            register_ram_reset(bus, 0xFF);
+            bus.iwram[0x7FFA] = 0;
+            soft_reset(bus, cpu);
+        }
+        0x27 => {
+            // CustomHalt: bit 7 of r2 selects Stop, which waits for a keypad or
+            // cartridge interrupt; halting until any interrupt is equivalent here.
+            bus.halt_request = true;
+        }
+        // BIOS sound driver (SoundDriverInit/Main/VSync…, MusicPlayer*,
+        // VSyncOff/On, GetJumpList): commercial games link their own driver.
+        0x1A..=0x1E | 0x20..=0x24 | 0x28..=0x2A => {}
         _ => tracing::warn!("unimplemented BIOS SWI {n:#04x}"),
     }
     SwiOutcome::Handled
@@ -178,5 +204,35 @@ mod tests {
         assert_eq!(word(0x134), 0xE510_F004);
         assert_eq!(word(0x13C), 0xE25E_F004);
         assert_eq!(word(0x18) >> 24, 0xEA, "IRQ vector is a branch");
+        assert_eq!(word(0x144), 0xE55E_C002, "prefetched after an IRQ returns");
+    }
+
+    fn machine() -> (GbaBus, Arm) {
+        let mut rom = vec![0u8; 0x200];
+        rom[0xB2] = 0x96;
+        let bus = GbaBus::new(crate::cart::Cartridge::new(rom), stub_image());
+        (bus, Arm::new(cpu_arm::CpuModel::Arm7Tdmi))
+    }
+
+    #[test]
+    fn sound_bias_custom_halt_and_hard_reset() {
+        use cpu_arm::Bus;
+        let (mut bus, mut cpu) = machine();
+        bus.write16(0x0400_0088, 0xC000, Access::NonSeq);
+        cpu.r[0] = 1;
+        swi(&mut bus, &mut cpu, 0x19);
+        assert_eq!(bus.read16(0x0400_0088, Access::NonSeq), 0xC200, "bias level set, other bits kept");
+        cpu.r[0] = 0;
+        swi(&mut bus, &mut cpu, 0x19);
+        assert_eq!(bus.read16(0x0400_0088, Access::NonSeq) & 0x3FE, 0);
+
+        swi(&mut bus, &mut cpu, 0x27);
+        assert!(bus.halt_request, "CustomHalt halts");
+
+        bus.ewram[0x100] = 7;
+        bus.iwram[0x7FFA] = 1;
+        swi(&mut bus, &mut cpu, 0x26);
+        assert_eq!(bus.ewram[0x100], 0, "HardReset clears RAM");
+        assert_eq!(cpu.pc(), 0x0800_0000, "and restarts the cartridge");
     }
 }

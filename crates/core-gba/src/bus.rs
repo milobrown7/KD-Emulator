@@ -809,10 +809,13 @@ impl Bus for GbaBus {
         self.write8_raw(addr, v);
     }
     fn write16(&mut self, addr: u32, v: u16, access: Access) {
+        // Only the 8-bit save chip sees the low address bit.
+        let addr = if addr >> 25 == 0x07 { addr } else { addr & !1 };
         self.tick(self.wait16(addr, access));
         self.write16_raw(addr, v);
     }
     fn write32(&mut self, addr: u32, v: u32, access: Access) {
+        let addr = if addr >> 25 == 0x07 { addr } else { addr & !3 };
         self.tick(self.wait32(addr, access));
         self.write32_raw(addr, v);
     }
