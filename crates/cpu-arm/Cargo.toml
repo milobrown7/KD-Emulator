@@ -1,0 +1,10 @@
+[package]
+name = "cpu-arm"
+description = "ARM7TDMI (ARMv4T) and ARM946E-S (ARMv5TE) interpreter shared by the GBA and NDS cores"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kd-core.workspace = true
+tracing.workspace = true

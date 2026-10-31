@@ -3,6 +3,14 @@
 version = 3
 
 [[package]]
+name = "cpu-arm"
+version = "0.1.0"
+dependencies = [
+ "kd-core",
+ "tracing",
+]
+
+[[package]]
 name = "kd-core"
 version = "0.1.0"
 dependencies = [

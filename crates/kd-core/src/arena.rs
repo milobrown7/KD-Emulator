@@ -108,6 +108,7 @@ impl PageAwareArena {
     }
 
     /// Size the caller asked for.
+    #[allow(clippy::misnamed_getters)]
     pub fn len(&self) -> usize {
         self.requested
     }
