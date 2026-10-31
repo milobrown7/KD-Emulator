@@ -1,12 +1,13 @@
 package com.kdemulator.bridge
 
-import android.view.Surface
+import java.nio.ByteBuffer
 
 /**
  * JNI surface of `libkd_emulator.so` (Rust crate `crates/android-jni`).
  *
  * Every function is a thin call into native code; the emulation itself runs
- * on a native thread pinned to the Tensor Prime/Mid clusters.
+ * on a native thread pinned to the Tensor Prime/Mid clusters, and finished
+ * frames are pulled by [com.kdemulator.ui.game.GameView] with [nativeCopyFrame].
  */
 object NativeEmulatorBridge {
     init {
@@ -39,11 +40,11 @@ object NativeEmulatorBridge {
     }
 
     /** `kd_core::System` discriminants. */
-    enum class Console(val id: Int, val label: String, val screenWidth: Int, val screenHeight: Int) {
-        GBA(1, "Game Boy Advance", 240, 160),
-        NDS(2, "Nintendo DS", 256, 384),
-        GAMECUBE(3, "GameCube", 640, 480),
-        WII(4, "Wii", 640, 480);
+    enum class Console(val id: Int, val label: String, val shortLabel: String, val screenWidth: Int, val screenHeight: Int) {
+        GBA(1, "Game Boy Advance", "GBA", 240, 160),
+        NDS(2, "Nintendo DS", "DS", 256, 384),
+        GAMECUBE(3, "GameCube", "GC", 640, 480),
+        WII(4, "Wii", "Wii", 640, 480);
 
         companion object {
             fun fromId(id: Int): Console? = entries.firstOrNull { it.id == id }
@@ -52,16 +53,31 @@ object NativeEmulatorBridge {
 
     @JvmStatic external fun nativeInit(cacheDir: String): String
 
-    /** Load a game from a Storage Access Framework descriptor. Returns a [Console] id or -1. */
+    /** Load a game from a file descriptor. Returns a [Console] id or -1. */
     @JvmStatic external fun nativeLoadRomFd(fd: Int, name: String): Int
 
-    /** "systemId|gameCode|title" from the header only, or "" if unrecognised. */
-    @JvmStatic external fun nativePeekTitleFd(fd: Int, name: String): String
+    /**
+     * Library metadata as `key=value` lines (`system`, `code`, `title`, `ac`,
+     * `icon_w`, `icon_h`); the game's own artwork, if any, is written to
+     * [iconOut] as ARGB pixels (needs room for 96x32).
+     */
+    @JvmStatic external fun nativeGameInfoFd(fd: Int, name: String, iconOut: IntArray): String
 
-    @JvmStatic external fun nativeSetSurface(surface: Surface?)
     @JvmStatic external fun nativeStart()
     @JvmStatic external fun nativePause()
     @JvmStatic external fun nativeStop()
+
+    /** `width shl 16 or height` of the newest frame (0 before any frame). */
+    @JvmStatic external fun nativeGetFrameSize(): Int
+
+    /**
+     * Copy the newest RGBA frame into a direct [buffer] if it is newer than
+     * [lastSeq]. Returns its sequence number, or -1 if the buffer is too small.
+     */
+    @JvmStatic external fun nativeCopyFrame(buffer: ByteBuffer, lastSeq: Long): Long
+
+    /** Step [frames] frames synchronously while paused (frame advance). */
+    @JvmStatic external fun nativeRunFrames(frames: Int)
 
     @JvmStatic external fun nativeSetInput(
         buttons: Int,
@@ -89,6 +105,26 @@ object NativeEmulatorBridge {
     @JvmStatic external fun nativeGetBackup(): ByteArray
     @JvmStatic external fun nativeLoadBackup(data: ByteArray)
 
+    /** 1 = normal speed, 2–8 = fast-forward. */
+    @JvmStatic external fun nativeSetSpeed(speed: Int)
+
+    /** Output volume 0–256 (256 = unity). */
+    @JvmStatic external fun nativeSetVolume(volume: Int)
+
+    /** Rewind snapshot spacing in frames; 0 disables rewind. */
+    @JvmStatic external fun nativeSetRewindInterval(frames: Int)
+    @JvmStatic external fun nativeSetRewinding(on: Boolean)
+    @JvmStatic external fun nativeGetRewindAvailable(): Int
+
+    /** Replace the active cheats; returns error lines ("" when all parsed). */
+    @JvmStatic external fun nativeSetCheats(spec: String): String
+
+    /** "" when [code] parses as [format], otherwise the error. */
+    @JvmStatic external fun nativeValidateCheat(format: String, code: String): String
+
+    /** DS microphone input (16-bit mono PCM). */
+    @JvmStatic external fun nativePushMic(samples: ShortArray, count: Int)
+
     /** Animal Crossing time travel: move the guest clock by [seconds]. */
     @JvmStatic external fun nativeTimeTravel(seconds: Long)
     @JvmStatic external fun nativeSetClockOffset(seconds: Long)
@@ -102,6 +138,10 @@ object NativeEmulatorBridge {
 
     @JvmStatic external fun nativeGetEmuThreadTid(): Int
     @JvmStatic external fun nativeGetLastFrameNanos(): Long
+
+    /** Separators for [nativeSetCheats] (ASCII record / unit separators). */
+    const val CHEAT_RECORD_SEP = '\u001E'
+    const val CHEAT_FIELD_SEP = '\u001F'
 
     /** Parse the native `key=value` format. */
     fun parseInfo(text: String): Map<String, String> =

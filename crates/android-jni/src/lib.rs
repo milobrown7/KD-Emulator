@@ -737,6 +737,9 @@ pub const BUTTON_BITS: [(&str, u32); 21] = [
 mod tests {
     use super::*;
 
+    /// Tests that drive the process-wide runtime must not overlap.
+    static RUNTIME_LOCK: Mutex<()> = Mutex::new(());
+
     #[test]
     fn button_bits_match_kotlin_constants() {
         let kt = std::fs::read_to_string(concat!(
@@ -760,6 +763,20 @@ mod tests {
     }
 
     #[test]
+    fn emulation_thread_keeps_real_time_pace() {
+        let _serial = RUNTIME_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let mut rom = vec![0u8; 0x200];
+        rom[0..4].copy_from_slice(&0xEAFF_FFFEu32.to_le_bytes());
+        rom[0xB2] = 0x96;
+        assert_eq!(load("pace.gba", rom), kd_core::System::Gba as jint);
+        start_thread();
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        let frames = with_session(0, |s| s.stats.frames);
+        stop_thread();
+        assert!((25..=45).contains(&frames), "{frames} frames in 600 ms (expected ~36)");
+    }
+
+    #[test]
     fn read_fd_reads_whole_file_without_closing_it() {
         use std::io::Write;
         use std::os::fd::AsRawFd;
@@ -774,6 +791,7 @@ mod tests {
 
     #[test]
     fn runtime_load_start_stop_cycle() {
+        let _serial = RUNTIME_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let mut rom = vec![0u8; 0x200];
         rom[0..4].copy_from_slice(&0xEAFF_FFFEu32.to_le_bytes());
         rom[0xB2] = 0x96;

@@ -47,7 +47,20 @@ cargo ndk -t arm64-v8a --platform 31 -o android/app/src/main/jniLibs \
 
 # APK (Gradle's preBuild runs the cargo-ndk step above automatically)
 cd android && ./gradlew assembleDebug
+
+# App UI tests: Robolectric on the JVM with a host build of libkd_emulator.so
+# (screenshots land in android/app/build/screenshots). If Maven Central
+# rate-limits the android-all download, set ROBOLECTRIC_REPO to a mirror.
+cd android && ./gradlew testDebugUnitTest
+
+# Signed release APK (unsigned when KD_KEYSTORE is not set)
+KD_KEYSTORE=release.jks KD_KEYSTORE_PASSWORD=… KD_KEY_ALIAS=… KD_KEY_PASSWORD=… \
+    ./gradlew assembleRelease
 ```
+
+Releases: pushing a `v*` tag runs `.github/workflows/release.yml`. It runs the host tests, builds and signs
+the APK, and publishes it with `RELEASE_NOTES.md` as the release text. Keep `versionCode`/`versionName` in
+`android/app/build.gradle.kts` in step with the tag.
 
 `android/local.properties` (gitignored) needs `sdk.dir=...` or `ANDROID_HOME`.
 The app is arm64-v8a only, minSdk 31, targetSdk 35.
@@ -226,3 +239,11 @@ It never changes the host clock.
 - JNI: export names must match `NativeEmulatorBridge.kt`. The
   `BUTTON_BITS` test in `android-jni` checks that the button bits match the
   Kotlin constants.
+- Frames reach the UI through `FrameSlot` (`nativeCopyFrame` into a direct
+  buffer). `GameView` draws each skin screen rect, so never present from
+  native code.
+- Controller skins use Delta's `info.json` model (`skins/SkinModel.kt`).
+  Built-in skins are generated per screen size in `BuiltInSkins.kt`; input
+  names follow Delta's (`a`, `b`, `up`, `menu`, `toggleFastForward`, …), plus
+  `rewind`, `one`, `two`, `plus`, `minus`, `home`, `c`, `z`, and the
+  `analogStick*` and `cStick*` inputs.

@@ -7,6 +7,9 @@
     <uses-feature android:name="android.hardware.vulkan.level" android:version="1" android:required="false" />
 
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Only requested when the player turns on the DS microphone. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <application
         android:allowBackup="true"

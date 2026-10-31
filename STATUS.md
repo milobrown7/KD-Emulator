@@ -3,7 +3,7 @@
 What is implemented, how each part is verified, and what is still missing.
 Update this file in the same commit as the code it describes.
 
-**Last verified:** 214 host tests passing (`cargo test --workspace`). `cargo clippy --workspace --all-targets -- -D warnings`
+**Last verified:** 243 host tests passing (`cargo test --workspace`) and 2 app UI tests (Robolectric, `./gradlew testDebugUnitTest`). `cargo clippy --workspace --all-targets -- -D warnings`
 is clean. `cargo check --target aarch64-linux-android -p android-jni` passes. `libkd_emulator.so` was built with
 NDK r28 / cargo-ndk 4.1.2, and every `LOAD` segment is `Align 0x4000`, with 20 JNI exports.
 `./gradlew assembleDebug` and `assembleRelease` (R8) both succeed (AGP 8.7.3, Kotlin 2.1.0, compileSdk 35). In
@@ -42,7 +42,7 @@ both APKs the stripped 1.1 MB `libkd_emulator.so` is stored uncompressed and pas
 - [x] Cartridge GPIO: RTC (from `GuestClock`), solar sensor; tilt sensor
 - [x] SIO JoyBus mode (GameCube link), multiboot boot from EWRAM
 
-### Phase 3 — Nintendo DS (`core-nds`): done (sound and Wi-Fi excluded)
+### Phase 3 — Nintendo DS (`core-nds`): done (Wi-Fi excluded)
 - [x] ARM9 + ARM7 run in lockstep slices of 64 master cycles; direct boot from cartridge header, HLE BIOS for both CPUs
 - [x] Shared bus: main RAM, WRAMCNT split, ARM7 WRAM, divider, sqrt, IPC sync/FIFO with IRQs
 - [x] VRAM banks A–I with page-table mapping (LCDC, BG/OBJ, ext palettes, texture/palette slots, ARM7)
@@ -52,6 +52,8 @@ both APKs the stripped 1.1 MB `libkd_emulator.so` is stored uncompressed and pas
 - [x] SPI: synthesized firmware with user settings + CRC, touchscreen (TSC), power management
 - [x] RTC with time travel; game card protocol (KEY2 `0xB7` reads); AUXSPI EEPROM/Flash saves
 - [x] Animal Crossing: Wild World gets a 256 KB Flash save hint (`ADM*`)
+- [x] Sound (`spu.rs`): 16 channels (PCM8/PCM16/IMA-ADPCM, PSG square on 8–13, noise on 14–15), both capture units, mixer bypass bits, master volume; clocked every 2048 master cycles (32 728 Hz)
+- [x] Microphone through TSC channel 6, fed from the phone's microphone
 
 ### Phase 4 — PowerPC (`cpu-ppc`): done (JIT covers an integer subset)
 - [x] Gekko/Broadway interpreter: integer, FP single/double, CR, SPRs, exceptions, decrementer, `sc`/`rfi`, `dcbz`
@@ -84,24 +86,41 @@ both APKs the stripped 1.1 MB `libkd_emulator.so` is stored uncompressed and pas
 
 ### Phase 7 — Android (`android-jni`, `android/`): done
 - [x] `libkd_emulator.so`: `Session` (system detection, per-core frame loop, audio resample to 48 kHz), runtime thread pinned to the fast cluster
-- [x] ANativeWindow CPU blit; AAudio low-latency callback stream; SAF file descriptors (whole read or streamed GameCube discs)
-- [x] JNI exports for `com.kdemulator.bridge.NativeEmulatorBridge` (20 functions); button bits checked against the Kotlin source by a test
-- [x] Compose app:
-  - `RomLibraryScreen`: SAF folder/file pickers, Animal Crossing cards
-  - `EmulationSurfaceScreen`: SurfaceView, menu, save states, time-travel dialog
-  - `TouchControllerOverlay`: classic, stylus, dual-stick and pointer layouts
-  - `MobileDebuggerSheet`
-  - `HardwareGamepadManager`
-  - `SensorMotionManager`: tilt, gyro pointer, light sensor
-  - `TensorThermalHintManager`: ADPF thermal listener and performance hint session
-- [x] Island theme (original art: leaf launcher icon, palette); no Nintendo assets
+- [x] AAudio low-latency callback stream; SAF file descriptors (whole read or streamed GameCube discs)
+- [x] Button bits checked against the Kotlin source by a test
+
+### Phase 8 — Delta-style app: done
+- [x] Runtime (`kd-core`, `android-jni`):
+  - fast-forward 2–8× with pitch-matched audio;
+  - hold-to-rewind (delta-compressed history, 96 MiB budget);
+  - per-frame cheats: GBA GameShark/AR v1–v2 (TEA), CodeBreaker, raw; DS Action Replay; GameCube/Wii Gecko;
+  - volume control;
+  - `peek`/`poke` on every core.
+- [x] Library metadata read with random access: DS banner icon and title, GameCube `opening.bnr` banner, WBFS header copy
+- [x] Frames handed to a Kotlin `GameView` (shared slot + direct-buffer copy, GPU-scaled per screen rect); replaces the `ANativeWindow` blit
+- [x] Library:
+  - one page per console with artwork tiles (game icon or banner, generated cartridge art, or a picked photo);
+  - import of files and `.zip` archives (cartridges copied, large discs referenced);
+  - long-press menu: resume, start over, cheats, rename, artwork, import/export save, delete.
+- [x] Game screen:
+  - auto save with screenshot on exit and auto-resume;
+  - pause menu: save/load state, cheats, fast forward, rewind, hold buttons, screenshot, time travel, DS mic, debug info;
+  - save-state browser (Auto/Quick/General, thumbnails, rename, delete);
+  - cheat editor validated by the native parser.
+- [x] Controller skins:
+  - built-in layouts for every console in portrait and landscape;
+  - Delta `.deltaskin` import (`info.json` representations, items, `extendedEdges`, screens, PDF/PNG artwork);
+  - multi-touch with sliding, 8-way d-pad, thumbsticks, DS touchscreen and Wii pointer;
+  - opacity and haptics settings.
+- [x] Settings: skins per console, opacity, haptics, smooth scaling, auto-resume, fast-forward speed, rewind interval, volume, DS mic, gyro pointer
+- [x] Island theme (original art: leaf launcher icon, palette); no Nintendo or Delta assets
 
 ## Animal Crossing fit, per system
 
 | System | Profile turns on | Works today | Not yet |
 |---|---|---|---|
 | GBA | JoyBus link companion; multiboot images from the GameCube game boot via `Gba::new_multiboot` | JoyBus reset/status/read/write; multiboot boot; GBA wired to GameCube port 2 | Animal Crossing's island transfer uses the GameCube game, so it inherits the GameCube gaps |
-| NDS (Wild World `ADM*`) | Stylus layout, time-travel RTC, 256 KB Flash save | Direct boot path, RTC with time travel, Flash save, touch | Sound is silent; not verified with a retail dump in this repo |
+| NDS (Wild World `ADM*`) | Stylus layout, time-travel RTC, 256 KB Flash save | Direct boot path, RTC with time travel, Flash save, touch, sound, microphone | Not verified with a retail dump in this repo |
 | GameCube (`GAF*`/`GAE*`) | Memory Card 251 in slot A, GBA on port 2, time-travel RTC | Disc header detection, HLE apploader, Card 251, IPL RTC time travel | Retail game can't reach gameplay (see gaps) |
 | Wii (City Folk `RUU*`) | Pointer layout, SD card, time-travel | WBFS detection, IOS SD/NAND nodes, pointer reports | Retail discs need the user's common key; BT stack is HLE |
 
@@ -121,7 +140,7 @@ Each gap that guest code can reach is also logged at runtime with `tracing::warn
 - Wii: no common-key decryption (it must come from the user), no RVZ, no WAD install, no Bluetooth HCI stack (Wii Remote reports are synthesized).
 
 **NDS**
-- Sound is not emulated (silence).
+- Sound plays back nearest-sample (as the hardware does); the capture "add to channel" bit is ignored.
 - Wi-Fi is not emulated.
 - Display capture, 3D edge marking and anti-aliasing are not emulated.
 - ARM9 cycle timing is approximate.
@@ -129,17 +148,23 @@ Each gap that guest code can reach is also logged at runtime with `tracing::warn
 **GBA**
 - Prefetch-buffer timing is approximate.
 
-**Not verified on hardware:** no Tensor device in CI. The Android-only paths (AAudio, ANativeWindow, ADPF, the JIT on device) build and type-check but have only been run as host equivalents.
+**App**
+- Rewinding from the pause menu steps back about 3 seconds; there is no rewind timeline view yet.
+- Imported `.deltaskin` files: thumbstick images are drawn as plain circles, and `ipad`-only skins use the iPad layout.
+
+**Not verified on hardware:** no Tensor device in CI. The Android-only paths (AAudio, ADPF, haptics, the microphone, the JIT on device) build and type-check, and the app UI runs in Robolectric tests against the host build of the native library, but nothing has run on a physical phone.
 
 ## Verification log
 
 | Check | Command | Result |
 |---|---|---|
-| Host tests | `cargo test --workspace` | 214 passed |
+| Host tests | `cargo test --workspace` | 243 passed |
+| App UI tests | `cd android && ./gradlew testDebugUnitTest` (Robolectric, host `libkd_emulator.so`) | 2 passed: import → library pages → play → touch A → pause menu → save state → cheats → settings → skins; landscape game screen; screenshots in `app/build/screenshots` |
 | Lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
 | Android type-check | `cargo check --target aarch64-linux-android -p android-jni` | ok |
 | Native library | `cargo ndk -t arm64-v8a --platform 31 ... build --release -p android-jni` | ok |
 | 16 KB alignment | `llvm-readelf -lW libkd_emulator.so` | all `LOAD` `Align 0x4000` |
 | APK (debug + release/R8) | `cd android && ./gradlew assembleDebug assembleRelease` | ok |
 | APK 16 KB zip alignment | `zipalign -c -P 16 4 app-*.apk` | ok; `.so` stored uncompressed |
-| JNI after R8 | `dexdump` of release dex vs `android-jni` exports | 20/20 present, signatures match |
+| JNI after R8 | `dexdump` of release dex vs `android-jni` exports | 30/30 present, names and signatures match |
+| Release signing | `KD_KEYSTORE=… ./gradlew assembleRelease`, `apksigner verify` | ok (v0.2.0, versionCode 2) |

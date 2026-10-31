@@ -1,7 +1,22 @@
 # KD-Emulator
 
 An Android emulator for Game Boy Advance, Nintendo DS, GameCube and Wii, tuned for Google Tensor phones (G1–G5).
-It has a Rust core with a Kotlin / Jetpack Compose front end.
+It has a Rust core and a Kotlin / Jetpack Compose app modelled on Delta:
+- an artwork library with one page per console;
+- controller skins (including imported `.deltaskin` files);
+- save states with screenshots, rewind, fast-forward and cheats;
+- auto-resume.
+
+**Download:** the APK is on the [Releases](../../releases) page.
+
+<p>
+<img src="docs/screenshots/library-ds.jpg" width="180" alt="DS library page with game icons">
+<img src="docs/screenshots/game.jpg" width="180" alt="A GBA game with the built-in controller skin">
+<img src="docs/screenshots/pause-menu.jpg" width="180" alt="Pause menu">
+<img src="docs/screenshots/save-states.jpg" width="180" alt="Save state browser">
+</p>
+
+The screenshots come from the app's JVM UI tests running synthetic test cartridges.
 
 Every system has an **Animal Crossing profile**. When it recognises an Animal Crossing game code, the emulator sets
 the console up the way that game expects:
@@ -21,6 +36,7 @@ Time travel changes only the game's clock, never your phone's. The offset is rem
 ```sh
 cargo test --workspace                       # host tests, no device needed
 cd android && ./gradlew assembleDebug        # APK; builds libkd_emulator.so via cargo-ndk
+cd android && ./gradlew testDebugUnitTest    # UI tests (Robolectric + host build of the native library)
 ```
 
 The APK build needs the Android SDK (platform 35), NDK r28, `rustup target add aarch64-linux-android` and

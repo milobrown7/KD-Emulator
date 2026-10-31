@@ -18,8 +18,9 @@ import kotlinx.coroutines.flow.asStateFlow
  *   ramps the Prime/Mid clusters exactly as much as needed.
  */
 class TensorThermalHintManager(private val context: Context) {
-    private val power = context.getSystemService(PowerManager::class.java)
-    private val hints = context.getSystemService(PerformanceHintManager::class.java)
+    // Either service can be missing (some devices, test environments).
+    private val power: PowerManager? = runCatching { context.getSystemService(PowerManager::class.java) }.getOrNull()
+    private val hints: PerformanceHintManager? = runCatching { context.getSystemService(PerformanceHintManager::class.java) }.getOrNull()
     private var session: PerformanceHintManager.Session? = null
 
     private val _status = MutableStateFlow(PowerManager.THERMAL_STATUS_NONE)
@@ -31,11 +32,14 @@ class TensorThermalHintManager(private val context: Context) {
     }
 
     fun start(targetFps: Double) {
-        power.addThermalStatusListener(context.mainExecutor, listener)
-        listener.onThermalStatusChanged(power.currentThermalStatus)
+        // Some devices (and test environments) have no thermal service.
+        runCatching {
+            power?.addThermalStatusListener(context.mainExecutor, listener)
+            power?.let { listener.onThermalStatusChanged(it.currentThermalStatus) }
+        }
         val tid = NativeEmulatorBridge.nativeGetEmuThreadTid()
         if (tid > 0 && session == null) {
-            session = hints?.createHintSession(intArrayOf(tid), (1_000_000_000.0 / targetFps).toLong())
+            session = runCatching { hints?.createHintSession(intArrayOf(tid), (1_000_000_000.0 / targetFps).toLong()) }.getOrNull()
         }
     }
 
@@ -46,7 +50,7 @@ class TensorThermalHintManager(private val context: Context) {
     }
 
     fun stop() {
-        power.removeThermalStatusListener(listener)
+        runCatching { power?.removeThermalStatusListener(listener) }
         session?.close()
         session = null
     }

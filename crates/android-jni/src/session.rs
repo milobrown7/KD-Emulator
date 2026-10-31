@@ -519,6 +519,46 @@ mod tests {
         rom
     }
 
+    /// The Kotlin UI test's cartridge: mode 3 + a colour ramp in VRAM.
+    fn gradient_rom() -> Vec<u8> {
+        let mut rom = gba_rom();
+        let prog: [u32; 11] = [
+            0xE3A0_0301,
+            0xE3A0_1B01,
+            0xE281_1003,
+            0xE1C0_10B0,
+            0xE3A0_0406,
+            0xE3A0_2000,
+            0xE0C0_20B2,
+            0xE282_2001,
+            0xE352_0C96,
+            0xBAFF_FFFB,
+            0xEAFF_FFFE,
+        ];
+        for (i, w) in prog.iter().enumerate() {
+            rom[0xC0 + i * 4..][..4].copy_from_slice(&w.to_le_bytes());
+        }
+        rom
+    }
+
+    #[test]
+    fn gradient_cartridge_draws_mode3() {
+        let mut s = Session::new(create_core("ramp.gba", gradient_rom()).unwrap());
+        for _ in 0..3 {
+            s.step();
+        }
+        let f = s.core.frame();
+        let distinct: std::collections::HashSet<u32> = f.pixels.iter().copied().collect();
+        assert!(
+            distinct.len() > 100,
+            "{} distinct colours; DISPCNT={:#x}",
+            distinct.len(),
+            s.core.peek(0x0400_0000, 2)
+        );
+        let alphas: std::collections::HashSet<u32> = f.pixels.iter().map(|p| p >> 24).collect();
+        assert_eq!(alphas, [0xFF].into_iter().collect(), "frames must be opaque for Android bitmaps");
+    }
+
     #[test]
     fn detects_systems() {
         assert_eq!(detect_system("Game.GBA", &[]), Some(System::Gba));
