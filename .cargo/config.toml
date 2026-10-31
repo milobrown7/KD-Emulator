@@ -1,0 +1,25 @@
+# KD-Emulator build configuration.
+#
+# Android 15+ devices (Tensor G5 / Pixel 10) boot a 16 KB page-size kernel.
+# Every shared object we ship must have its PT_LOAD segments aligned to
+# 16384 bytes or the dynamic linker refuses to map it.
+
+[target.aarch64-linux-android]
+rustflags = [
+    "-C", "link-arg=-Wl,-z,max-page-size=16384",
+    "-C", "link-arg=-Wl,-z,common-page-size=16384",
+    # arm64-v8a baseline. dotprod / fp16 / i8mm / SVE2 paths are selected at
+    # runtime via getauxval(), never baked in, so G1-G4 keep working.
+    "-C", "target-feature=+neon",
+]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = [
+    "-C", "link-arg=-Wl,-z,max-page-size=16384",
+    "-C", "link-arg=-Wl,-z,common-page-size=16384",
+]
+
+[env]
+# Picked up by build scripts that need to know which page size to assume
+# when they cannot query the target (cross compilation).
+KD_TARGET_MAX_PAGE_SIZE = "16384"

@@ -1,0 +1,10 @@
+[package]
+name = "kd-core"
+description = "KD-Emulator core services: cycle scheduler, save states, audio ring buffer, 16 KB-safe arenas, Tensor CPU topology and thermal policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+libc.workspace = true
+tracing.workspace = true

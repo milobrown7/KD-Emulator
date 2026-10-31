@@ -1,0 +1,29 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+repository = "https://github.com/milobrown7/KD-Emulator"
+
+[workspace.dependencies]
+libc = "0.2"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+kd-core = { path = "crates/kd-core" }
+cpu-arm = { path = "crates/cpu-arm" }
+core-gba = { path = "crates/core-gba" }
+
+# Interpreters are unusably slow without optimisation, even in tests.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+debug = "line-tables-only"
